@@ -205,6 +205,9 @@ def test_repository_docs_are_chinese_first_then_english() -> None:
         ROOT / "docs" / "collector_quick_check_guide.md",
         ROOT / "docs" / "aggregation_operator_guide.md",
         ROOT / "docs" / "dataflow_agent_input_contract_v0.1.md",
+        ROOT / "docs" / "devops_collection_filling_guide.md",
+        ROOT / "docs" / "dcp_self_check_guide.md",
+        ROOT / "docs" / "package_generation_guide.md",
     ]
     for path in docs:
         text = path.read_text(encoding="utf-8")
@@ -248,49 +251,18 @@ def test_generated_docs_are_chinese_first_then_english(tmp_path: Path) -> None:
     assert paragraphs.index("中文版本") < paragraphs.index("English Version")
 
 
-def test_role_terms_are_neutral_in_docs_and_generated_templates() -> None:
-    docs_and_templates = [
-        ROOT / "README.md",
-        ROOT / "docs" / "collector_quick_check_guide.md",
-        ROOT / "docs" / "aggregation_operator_guide.md",
-        ROOT / "docs" / "dataflow_agent_input_contract_v0.1.md",
-        ROOT / "src" / "dataflow_agent" / "packager.py",
-        ROOT / "src" / "dataflow_agent" / "report_generator.py",
-        ROOT / "src" / "dataflow_agent" / "summaries.py",
-        ROOT / "src" / "dataflow_agent" / "cli.py",
-    ]
-    forbidden_terms = [
-        "devops",
-        "dev ops",
-        "sre",
-        "collector",
-        "collectors",
-        "operator",
-        "operators",
-        "colleague",
-        "colleagues",
-        "同事",
-        "团队",
-        "岗位",
-        "采集者",
-        "运维",
-    ]
-
-    for path in docs_and_templates:
-        text = path.read_text(encoding="utf-8").lower()
-        for term in forbidden_terms:
-            assert term not in text, f"{path.relative_to(ROOT)} contains role term {term!r}"
-
-    with ZipFile(SAMPLE_WORKBOOK) as workbook:
-        for name in workbook.namelist():
-            if name.endswith((".xml", ".rels")):
-                data = workbook.read(name).decode("utf-8", errors="ignore").lower()
-                for term in forbidden_terms:
-                    assert term not in data, f"{SAMPLE_WORKBOOK.relative_to(ROOT)}:{name} contains role term {term!r}"
-
+def test_devops_docs_and_deterministic_agent_boundary_are_documented() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "信息采集人员填写工作簿" in readme
-    assert "数据汇总负责人收集多份 DCP" in readme
+    collection_guide = (ROOT / "docs" / "devops_collection_filling_guide.md").read_text(encoding="utf-8")
+    contract = (ROOT / "docs" / "dataflow_agent_input_contract_v0.1.md").read_text(encoding="utf-8")
+
+    assert "DevOps" in collection_guide
+    assert "规则驱动确定性 Agent" in readme
+    assert "不凭空补依赖" in readme
+    assert "不自动接受安全例外" in readme
+    assert "不修改生产环境" in readme
+    assert "rule-driven deterministic agent" in contract
+    assert "does not take over production environments" in contract
 
 
 def test_license_and_generic_naming_are_enforced() -> None:

@@ -14,6 +14,8 @@
 
 本文适用于需要接收多份 DCP 并生成最终交付包的数据汇总负责人。该流程不要求数据汇总负责人手工合并表格、手工修图或手工整理报告。
 
+Agent 是规则驱动确定性工具，只基于收集到的 DCP 工作簿和证据目录生成结果；它不会凭空补充缺失关系，也不会替负责人接受冲突或安全例外。
+
 ## 二、单个采集包出包方法
 
 当只有一个采集包需要出包时，在项目根目录执行：
@@ -93,6 +95,8 @@ Data aggregation; collection package merge; conflict report; data flow diagram; 
 ## 1. Scope
 
 This document applies to the data aggregation owner who receives multiple DCPs and produces the final delivery package. The workflow does not require manual spreadsheet merging, manual diagram editing, or manual report assembly.
+
+The agent is rule-driven and deterministic. It generates results only from collected DCP workbooks and evidence folders; it does not invent missing relationships or accept conflicts and security exceptions on behalf of the owner.
 
 ## 2. Build One Collection Package
 

@@ -4,7 +4,7 @@
 
 ## 摘要
 
-本文面向信息采集人员，说明如何使用一个脚本完成采集包质量自检。自检流程的目标是让使用者在提交前发现缺失字段、引用错误、证据缺失、待确认关系和关键链路风险，从而减少汇总阶段的返工。
+本文面向 DevOps 和信息采集人员，说明如何使用一个脚本完成采集包质量自检。自检流程的目标是让使用者在提交前发现缺失字段、引用错误、证据缺失、待确认关系和关键链路风险，从而减少汇总阶段的返工。
 
 ## 关键词
 
@@ -12,7 +12,9 @@
 
 ## 一、适用范围
 
-本文适用于负责填写 Dataflow Project 数据采集工作簿的信息采集人员。使用者不需要理解底层命令，也不需要手工生成图或报告，只需要维护源工作簿并执行自检脚本。
+本文适用于负责填写 Dataflow Project 数据采集工作簿的 DevOps 和信息采集人员。使用者不需要理解底层命令，也不需要手工生成图或报告，只需要维护源工作簿并执行自检脚本。
+
+Agent 是规则驱动确定性工具，只读取 DCP 工作簿和证据目录，不凭空补依赖、不自动接受安全例外、不修改生产环境。
 
 ## 二、输入要求
 
@@ -81,7 +83,7 @@ reports/logic_mapping_validation_report.docx
 
 ## Abstract
 
-This document is for information collection personnel and explains how to validate a collection package with one script. The goal is to help users identify missing fields, broken references, missing evidence, pending relationships, and key-path risks before submission, thereby reducing rework during aggregation.
+This document is for DevOps and information collection personnel and explains how to validate a collection package with one script. The goal is to help users identify missing fields, broken references, missing evidence, pending relationships, and key-path risks before submission, thereby reducing rework during aggregation.
 
 ## Keywords
 
@@ -89,7 +91,9 @@ Data collection; Data Collection Package; self-check; fix list; quality gate.
 
 ## 1. Scope
 
-This document applies to information collection personnel who fill in the Dataflow Project collection workbook. Users do not need to understand lower-level commands or manually generate diagrams and reports. They only need to maintain the source workbook and run the self-check script.
+This document applies to DevOps and information collection personnel who fill in the Dataflow Project collection workbook. Users do not need to understand lower-level commands or manually generate diagrams and reports. They only need to maintain the source workbook and run the self-check script.
+
+The agent is rule-driven and deterministic. It only reads the DCP workbook and evidence folder; it does not invent missing dependencies, automatically accept security exceptions, or modify production environments.
 
 ## 2. Input Requirements
 

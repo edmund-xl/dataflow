@@ -6,6 +6,8 @@
 
 本文定义 Dataflow Project 数据流图智能体与数据采集包之间的稳定接口。该契约规定输入目录结构、工作簿表单、状态语义、主键、外键、节点生成规则、边生成规则、质量门禁和输出产物。契约的目标是保证智能体不会脱离结构化输入推断生产事实，所有图、报告和归档包都可以从同一份数据采集包重复生成。
 
+当前版本是规则驱动确定性 Agent。事实来源仅限 DCP 工作簿和证据目录；Agent 不接管生产环境、不自动采集生产事实、不自动接受安全例外。
+
 ## 关键词
 
 输入契约；数据采集包；工作簿；主键；外键；图模型；质量门禁；交付包。
@@ -202,6 +204,8 @@ dataflow_package_v0.1/
 ## Abstract
 
 This document defines the stable interface between the Dataflow Project Dataflow Agent and the Data Collection Package. The contract specifies the input directory structure, workbook sheets, record-status semantics, primary keys, foreign keys, node-generation rules, edge-generation rules, quality gates, and output artifacts. Its purpose is to ensure that the agent never infers production facts outside structured input and that every diagram, report, and archive can be regenerated from the same collection package.
+
+The current version is a rule-driven deterministic agent. Its factual inputs are limited to the DCP workbook and evidence folder; it does not take over production environments, automatically collect production facts, or automatically accept security exceptions.
 
 ## Keywords
 
