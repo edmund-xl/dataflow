@@ -1,0 +1,136 @@
+{
+  "required_sheets": [
+    "00_Metadata",
+    "01_Projects",
+    "02_Networks",
+    "03_Servers",
+    "04_Services",
+    "05_Dependencies",
+    "06_Data_Assets",
+    "07_Firewalls",
+    "08_Cloud_Armor",
+    "09_IAM_SA",
+    "10_Monitoring",
+    "11_CICD",
+    "12_External_Services",
+    "13_Issues_Exceptions",
+    "14_Evidence_Index",
+    "90_Enums"
+  ],
+  "sheets": {
+    "00_Metadata": {
+      "fields": ["Field", "Value", "Required", "Description"],
+      "primary_key": "Field",
+      "required_fields": ["Field", "Value"]
+    },
+    "01_Projects": {
+      "fields": ["Record_ID", "Project_ID", "Project_Name", "Environment", "GCP_Org_or_Folder", "Billing_Tag", "Purpose", "Owner", "Included_In_Scope", "Source_Type", "Evidence_ID", "Confirmation_Status", "Collected_By", "Collected_At", "Notes"],
+      "primary_key": "Project_ID",
+      "required_fields": ["Record_ID", "Project_ID", "Project_Name", "Environment", "Included_In_Scope", "Evidence_ID", "Confirmation_Status"]
+    },
+    "02_Networks": {
+      "fields": ["Record_ID", "Network_ID", "Project_ID", "VPC_Name", "Subnet_Name", "Region", "Zone", "CIDR", "Network_Type", "Parent_Network", "Routing_Mode", "NAT_Name", "LB_Name", "PSC_or_Peering_Name", "Purpose", "Source_Type", "Evidence_ID", "Confirmation_Status", "Collected_By", "Collected_At", "Notes"],
+      "primary_key": "Network_ID",
+      "required_fields": ["Record_ID", "Network_ID", "Project_ID", "VPC_Name", "Evidence_ID", "Confirmation_Status"]
+    },
+    "03_Servers": {
+      "fields": ["Record_ID", "Instance_ID", "Platform", "Hostname", "Status", "IP_Internal", "IP_External", "Environment", "OS", "Instance_Type", "CPU", "Memory_GB", "Location", "Project_ID", "Network_Tag", "VPC", "Subnet", "Server_Role", "Business_Owner", "Source_Type", "Evidence_ID", "Confirmation_Status", "Collected_By", "Collected_At", "Notes"],
+      "primary_key": "Instance_ID",
+      "required_fields": ["Record_ID", "Instance_ID", "Hostname", "Status", "Environment", "Project_ID", "Evidence_ID", "Confirmation_Status"]
+    },
+    "04_Services": {
+      "fields": ["Record_ID", "Service_ID", "Service_Name", "Service_Priority", "Running_On_Instance_ID", "Process_Name", "Protocol", "Listen_Ports", "Config_File_Path", "Service_Owner", "Service_Role", "Environment", "Source_Type", "Evidence_ID", "Confirmation_Status", "Collected_By", "Collected_At", "Notes"],
+      "primary_key": "Service_ID",
+      "required_fields": ["Record_ID", "Service_ID", "Service_Name", "Service_Priority", "Running_On_Instance_ID", "Environment", "Evidence_ID", "Confirmation_Status"]
+    },
+    "05_Dependencies": {
+      "fields": ["Record_ID", "Dependency_ID", "Source_Service_ID", "Target_Service_ID", "Target_External_ID", "Target_Data_Asset_ID", "Target_Port", "Target_Port_Protocol", "Target_Path", "Auth_Method", "Direction", "Call_Description", "Dependency_Criticality", "Environment", "Source_Type", "Evidence_ID", "Confirmation_Status", "Collected_By", "Collected_At", "Notes"],
+      "primary_key": "Dependency_ID",
+      "required_fields": ["Record_ID", "Dependency_ID", "Source_Service_ID", "Target_Port", "Target_Port_Protocol", "Direction", "Dependency_Criticality", "Environment", "Evidence_ID", "Confirmation_Status"]
+    },
+    "06_Data_Assets": {
+      "fields": ["Record_ID", "Data_Asset_ID", "Data_Asset_Name", "Data_Asset_Type", "Project_ID", "VPC", "Subnet", "Region", "Access_Method", "Port", "Used_By_Service_ID", "Access_Type", "Backup_Policy", "Sensitivity", "Environment", "Source_Type", "Evidence_ID", "Confirmation_Status", "Collected_By", "Collected_At", "Notes"],
+      "primary_key": "Data_Asset_ID",
+      "required_fields": ["Record_ID", "Data_Asset_ID", "Data_Asset_Name", "Data_Asset_Type", "Project_ID", "Environment", "Evidence_ID", "Confirmation_Status"]
+    },
+    "07_Firewalls": {
+      "fields": ["Record_ID", "Firewall_ID", "Firewall_Name", "Project_ID", "VPC", "Direction", "Priority", "Action", "Source_Allowed", "Target_Type", "Target_Value", "Protocol", "Ports", "Reason", "Manage_By", "Related_Service_ID", "Related_Dependency_ID", "Environment", "Source_Type", "Evidence_ID", "Confirmation_Status", "Collected_By", "Collected_At", "Notes"],
+      "primary_key": "Firewall_ID",
+      "required_fields": ["Record_ID", "Firewall_ID", "Firewall_Name", "Project_ID", "VPC", "Direction", "Action", "Protocol", "Ports", "Environment", "Evidence_ID", "Confirmation_Status"]
+    },
+    "08_Cloud_Armor": {
+      "fields": ["Record_ID", "Policy_ID", "Policy_Name", "Project_ID", "Protected_Entry_ID", "Entry_Type", "Rule_Priority", "Rule_Action", "Match_Expression", "Backend_Service", "LB_Name", "Nginx_Related", "Environment", "Source_Type", "Evidence_ID", "Confirmation_Status", "Collected_By", "Collected_At", "Notes"],
+      "primary_key": "Policy_ID",
+      "required_fields": ["Record_ID", "Policy_ID", "Policy_Name", "Project_ID", "Protected_Entry_ID", "Entry_Type", "Rule_Action", "Environment", "Evidence_ID", "Confirmation_Status"]
+    },
+    "09_IAM_SA": {
+      "fields": ["Record_ID", "IAM_Binding_ID", "Service_Account_ID", "Service_Account_Email", "Used_By_Service_ID", "Role", "Scope", "Permission_Description", "Justification", "Is_High_Privilege", "Environment", "Source_Type", "Evidence_ID", "Confirmation_Status", "Collected_By", "Collected_At", "Notes"],
+      "primary_key": "IAM_Binding_ID",
+      "required_fields": ["Record_ID", "IAM_Binding_ID", "Service_Account_ID", "Service_Account_Email", "Role", "Scope", "Is_High_Privilege", "Environment", "Evidence_ID", "Confirmation_Status"]
+    },
+    "10_Monitoring": {
+      "fields": ["Record_ID", "Monitoring_ID", "Object_ID", "Object_Type", "Monitoring_Type", "Dashboard_URL", "Alert_Rule", "Logging_Coverage", "XDR_Coverage", "Coverage_Status", "Key_Link", "Environment", "Source_Type", "Evidence_ID", "Confirmation_Status", "Collected_By", "Collected_At", "Notes"],
+      "primary_key": "Monitoring_ID",
+      "required_fields": ["Record_ID", "Monitoring_ID", "Object_ID", "Object_Type", "Monitoring_Type", "Coverage_Status", "Environment", "Evidence_ID", "Confirmation_Status"]
+    },
+    "11_CICD": {
+      "fields": ["Record_ID", "CICD_ID", "Pipeline_Name", "System", "Repo", "Runner", "Artifact_Registry", "Deployment_Entry", "Target_Service_ID", "Target_Instance_ID", "Deployment_Account", "Approval_Required", "SecureLink_or_JumpServer", "Environment", "Source_Type", "Evidence_ID", "Confirmation_Status", "Collected_By", "Collected_At", "Notes"],
+      "primary_key": "CICD_ID",
+      "required_fields": ["Record_ID", "CICD_ID", "Pipeline_Name", "System", "Deployment_Entry", "Environment", "Evidence_ID", "Confirmation_Status"]
+    },
+    "12_External_Services": {
+      "fields": ["Record_ID", "External_ID", "External_Name", "External_Type", "Endpoint", "Protocol", "Port", "Auth_Method", "Used_By_Service_ID", "Direction", "Purpose", "Data_Classification", "Environment", "Source_Type", "Evidence_ID", "Confirmation_Status", "Collected_By", "Collected_At", "Notes"],
+      "primary_key": "External_ID",
+      "required_fields": ["Record_ID", "External_ID", "External_Name", "External_Type", "Endpoint", "Protocol", "Port", "Direction", "Environment", "Evidence_ID", "Confirmation_Status"]
+    },
+    "13_Issues_Exceptions": {
+      "fields": ["Record_ID", "Issue_ID", "Issue_Type", "Severity", "Affected_Object_Type", "Affected_Object_ID", "Description", "Suggested_Action", "Owner", "Status", "Accepted_Exception", "Due_Date", "Source_Detected_By", "Related_Evidence_ID", "Environment", "Notes"],
+      "primary_key": "Issue_ID",
+      "required_fields": ["Record_ID", "Issue_ID", "Issue_Type", "Severity", "Affected_Object_Type", "Affected_Object_ID", "Description", "Status"]
+    },
+    "14_Evidence_Index": {
+      "fields": ["Record_ID", "Evidence_ID", "Evidence_Type", "Evidence_Title", "File_or_URL", "Source_System", "Captured_By", "Captured_At", "Related_Task_ID", "Related_Object_ID", "Integrity_Note", "Notes"],
+      "primary_key": "Evidence_ID",
+      "required_fields": ["Record_ID", "Evidence_ID", "Evidence_Type", "Evidence_Title", "File_or_URL", "Source_System"]
+    },
+    "90_Enums": {
+      "fields": ["Enum_Name", "Value", "Description", "Used_By_Fields"],
+      "primary_key": "",
+      "required_fields": ["Enum_Name", "Value"]
+    }
+  },
+  "foreign_keys": [
+    ["02_Networks", "Project_ID", "01_Projects", "Project_ID", "optional"],
+    ["03_Servers", "Project_ID", "01_Projects", "Project_ID", "optional"],
+    ["04_Services", "Running_On_Instance_ID", "03_Servers", "Instance_ID", "required"],
+    ["05_Dependencies", "Source_Service_ID", "04_Services", "Service_ID", "required"],
+    ["05_Dependencies", "Target_Service_ID", "04_Services", "Service_ID", "optional"],
+    ["05_Dependencies", "Target_External_ID", "12_External_Services", "External_ID", "optional"],
+    ["05_Dependencies", "Target_Data_Asset_ID", "06_Data_Assets", "Data_Asset_ID", "optional"],
+    ["06_Data_Assets", "Project_ID", "01_Projects", "Project_ID", "optional"],
+    ["06_Data_Assets", "Used_By_Service_ID", "04_Services", "Service_ID", "optional_multi"],
+    ["07_Firewalls", "Project_ID", "01_Projects", "Project_ID", "optional"],
+    ["07_Firewalls", "Related_Service_ID", "04_Services", "Service_ID", "optional"],
+    ["07_Firewalls", "Related_Dependency_ID", "05_Dependencies", "Dependency_ID", "optional"],
+    ["08_Cloud_Armor", "Project_ID", "01_Projects", "Project_ID", "optional"],
+    ["09_IAM_SA", "Used_By_Service_ID", "04_Services", "Service_ID", "optional"],
+    ["11_CICD", "Target_Service_ID", "04_Services", "Service_ID", "optional"],
+    ["11_CICD", "Target_Instance_ID", "03_Servers", "Instance_ID", "optional"],
+    ["12_External_Services", "Used_By_Service_ID", "04_Services", "Service_ID", "optional"]
+  ],
+  "enum_fields": {
+    "Environment": ["Mainnet", "Prod", "Production", "Testnetv2", "Devnet", "Staging"],
+    "Confirmation_Status": ["Confirmed", "Auto_Detected", "Pending_Confirmation", "Rejected", "Not_Applicable"],
+    "Included_In_Scope": ["Yes", "No"],
+    "Is_High_Privilege": ["Yes", "No"],
+    "Logging_Coverage": ["Yes", "No", "Partial", "Unknown"],
+    "XDR_Coverage": ["Yes", "No", "Partial", "Unknown"],
+    "Coverage_Status": ["Covered", "Partial", "Missing", "Unknown"],
+    "Approval_Required": ["Yes", "No", "Required", "Not_Required"],
+    "Accepted_Exception": ["Yes", "No"],
+    "Severity": ["P0", "P1", "P2", "P3", "Info"],
+    "Status": ["Open", "Pending_Confirmation", "Confirmed_Issue", "Accepted_Exception", "False_Positive", "Resolved"],
+    "Protocol": ["TCP", "UDP", "HTTP", "HTTPS", "HTTP/HTTPS", "HTTP/JSON", "GRPC", "Private-IP", "Other"],
+    "Target_Port_Protocol": ["TCP", "UDP", "HTTP", "HTTPS", "HTTP/HTTPS", "HTTP/JSON", "GRPC", "Private-IP", "Other"]
+  }
+}

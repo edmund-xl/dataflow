@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dataflow-agent"
+version = "0.1.0"
+description = "Deterministic CLI agent for Dataflow Project data flow validation, graph generation, diagrams, reports, and packaging."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "LicenseRef-Proprietary"
+license-files = ["LICENSE"]
+dependencies = [
+  "openpyxl>=3.1",
+  "python-docx>=1.1",
+  "Pillow>=10",
+  "reportlab>=4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+dataflow-agent = "dataflow_agent.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
