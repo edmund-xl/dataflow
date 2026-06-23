@@ -179,6 +179,8 @@ dataflow_package_v0.1/
   metadata.json
 ```
 
+每个 `diagrams/` 图层均以同一文件名同时输出 SVG、PNG、PDF 和 Mermaid 调试文件。常规图层使用内置 C4 架构图风格，安全与监控图层使用深色审计风格；所有图形均由工作簿数据重新生成，不依赖外部图形命令。
+
 ## 十一、开源授权
 
 本项目采用 MIT License 开源授权。版权归属 edmund-xl；使用者可以在遵守许可证条款的前提下复制、使用、修改、分发和商用本软件副本。完整授权文本见仓库根目录 `LICENSE` 文件。
@@ -373,6 +375,8 @@ dataflow_package_v0.1/
   README.md
   metadata.json
 ```
+
+Each `diagrams/` layer is emitted with the same base name as SVG, PNG, PDF, and Mermaid debug files. Regular layers use the built-in C4 architecture style, and the security and monitoring layer uses a dark audit style; all diagrams are regenerated from workbook data and do not depend on external graph commands.
 
 ## 11. Open-Source License
 
