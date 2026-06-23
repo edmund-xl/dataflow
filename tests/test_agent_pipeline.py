@@ -270,6 +270,22 @@ def test_service_drilldown_renders_expected_artifacts(tmp_path: Path) -> None:
     assert "RPC API" in svg
 
 
+def test_service_drilldown_supports_depth_direction_theme_and_risk_focus(tmp_path: Path) -> None:
+    schema = load_schema()
+    workbook = read_workbook(SAMPLE_WORKBOOK, schema)
+    next(row for row in workbook.sheets["05_Dependencies"] if row["Dependency_ID"] == "dep-rpc-sequencer")["Confirmation_Status"] = "Pending_Confirmation"
+    normalized = normalize_workbook(workbook, schema)
+    graph = build_graph(normalized)
+
+    outputs = render_service_drilldown(graph, "svc-rpc-api", tmp_path, depth=2, direction="downstream", theme="dark", risk_focus=True)
+
+    assert len(outputs) == 4
+    svg = (tmp_path / "service_drilldown_svc-rpc-api.svg").read_text(encoding="utf-8")
+    assert "depth=2" in svg
+    assert "#101827" in svg
+    assert 'data-risk-level="review"' in svg
+
+
 def test_cli_input_can_be_copied_to_fresh_dcp(tmp_path: Path) -> None:
     dcp = tmp_path / "DCP_v0.1"
     dcp.mkdir()
@@ -401,6 +417,7 @@ def test_script_merge_dcp_runs_with_defaults() -> None:
 
 def test_script_service_drilldown_runs_with_defaults() -> None:
     subprocess.run(["scripts/build_service_drilldown.sh", "samples/DCP_v0.1", "svc-rpc-api"], cwd=ROOT, check=True, env=_script_env())
+    subprocess.run(["scripts/build_service_drilldown.sh", "samples/DCP_v0.1", "svc-rpc-api", "--depth", "2", "--direction", "downstream", "--theme", "dark", "--risk-focus"], cwd=ROOT, check=True, env=_script_env())
 
     output_dir = SAMPLE_DCP / "dist" / "service_drilldown_svc-rpc-api"
     assert (output_dir / "service_drilldown_svc-rpc-api.svg").exists()

@@ -76,6 +76,8 @@ scripts/merge_dcp.sh DCP_source_a DCP_source_b DCP_source_c
 scripts/build_service_drilldown.sh samples/DCP_v0.1 svc-rpc-api
 ```
 
+可选参数支持 `--depth`、`--direction upstream|downstream|both`、`--theme auto|light|dark|security` 和 `--risk-focus`，用于更精细的审查视图。
+
 ### 单服务端口查询
 
 需要快速查看单个服务的监听端口、上下游依赖、防火墙规则和监控覆盖时执行：
@@ -222,6 +224,8 @@ To inspect one service's upstream and downstream relationships, runtime instance
 ```bash
 scripts/build_service_drilldown.sh samples/DCP_v0.1 svc-rpc-api
 ```
+
+Optional arguments include `--depth`, `--direction upstream|downstream|both`, `--theme auto|light|dark|security`, and `--risk-focus` for more focused review views.
 
 ### Single-Service Port Query
 

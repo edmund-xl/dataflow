@@ -18,6 +18,7 @@ class View:
     title: str
     node_types: set[str]
     edge_types: set[str]
+    theme: str = "auto"
 
 
 @dataclass(frozen=True)
@@ -145,14 +146,25 @@ def render_diagrams(graph: GraphModel, diagrams_dir: Path) -> list[Path]:
     return outputs
 
 
-def render_service_drilldown(graph: GraphModel, service_id: str, diagrams_dir: Path) -> list[Path]:
+def render_service_drilldown(
+    graph: GraphModel,
+    service_id: str,
+    diagrams_dir: Path,
+    depth: int = 1,
+    direction: str = "both",
+    theme: str = "auto",
+    risk_focus: bool = False,
+) -> list[Path]:
     if service_id not in graph.nodes or graph.nodes[service_id].type != "service":
         raise ValueError(f"Service {service_id} does not exist in graph.")
     diagrams_dir.mkdir(parents=True, exist_ok=True)
-    nodes, edges = _select_service_drilldown(graph, service_id)
+    nodes, edges = _select_service_drilldown(graph, service_id, max(1, depth), direction, risk_focus)
     positions = _layout(nodes)
     base = f"service_drilldown_{safe_id(service_id)}"
-    view = View(base, f"Service Drilldown: {service_id}", {node.type for node in nodes}, {edge.type for edge in edges})
+    detail = f"depth={max(1, depth)} | direction={direction}"
+    if risk_focus:
+        detail += " | risk focus"
+    view = View(base, f"Service Drilldown: {service_id} ({detail})", {node.type for node in nodes}, {edge.type for edge in edges}, theme)
     return [
         _write_svg(diagrams_dir / f"{base}.svg", view, nodes, edges, positions),
         _write_png(diagrams_dir / f"{base}.png", view, nodes, edges, positions),
@@ -208,13 +220,28 @@ def _denoise_overview(nodes: list[GraphNode], edges: list[GraphEdge]) -> tuple[l
     return filtered_nodes or nodes, filtered_edges or edges
 
 
-def _select_service_drilldown(graph: GraphModel, service_id: str) -> tuple[list[GraphNode], list[GraphEdge]]:
+def _select_service_drilldown(graph: GraphModel, service_id: str, depth: int, direction: str, risk_focus: bool) -> tuple[list[GraphNode], list[GraphEdge]]:
     node_ids = {service_id}
     selected_edges: list[GraphEdge] = []
-    for edge in graph.edges:
-        if edge.source == service_id or edge.target == service_id:
-            selected_edges.append(edge)
-            node_ids.update({edge.source, edge.target})
+    frontier = {service_id}
+    direction = direction if direction in {"upstream", "downstream", "both"} else "both"
+    for _level in range(depth):
+        next_frontier: set[str] = set()
+        for edge in graph.edges:
+            include = False
+            if direction in {"downstream", "both"} and edge.source in frontier:
+                include = True
+            if direction in {"upstream", "both"} and edge.target in frontier:
+                include = True
+            if include:
+                selected_edges.append(edge)
+                before = len(node_ids)
+                node_ids.update({edge.source, edge.target})
+                if len(node_ids) != before:
+                    next_frontier.update({edge.source, edge.target} - frontier)
+        frontier = next_frontier - node_ids.intersection(frontier)
+        if not frontier:
+            break
     changed = True
     while changed:
         changed = False
@@ -231,6 +258,13 @@ def _select_service_drilldown(graph: GraphModel, service_id: str) -> tuple[list[
             deduped_edges.append(edge)
             seen_edges.add(edge.id)
     nodes = [node for node in graph.nodes.values() if node.id in node_ids]
+    if risk_focus:
+        risk_node_ids = {service_id}
+        risk_edges = [edge for edge in deduped_edges if _edge_risk_level(edge) != "normal" or edge.source == service_id or edge.target == service_id]
+        for edge in risk_edges:
+            risk_node_ids.update({edge.source, edge.target})
+        nodes = [node for node in nodes if node.id in risk_node_ids or _node_risk_level(node) != "normal"]
+        deduped_edges = [edge for edge in deduped_edges if edge.source in {node.id for node in nodes} and edge.target in {node.id for node in nodes}]
     return nodes, deduped_edges
 
 
@@ -890,7 +924,7 @@ def _text_width(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont)
 
 
 def _is_security_view(view: View) -> bool:
-    return view.filename == "05_security_monitoring_layer"
+    return view.filename == "05_security_monitoring_layer" or view.theme in {"dark", "security"}
 
 
 def _mmd_id(value: str) -> str:

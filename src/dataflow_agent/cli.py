@@ -56,6 +56,10 @@ def main(argv: list[str] | None = None) -> int:
     drilldown_parser.add_argument("--env", help="Environment name; defaults to 00_Metadata.Environment")
     drilldown_parser.add_argument("--version", help="Package version; defaults to 00_Metadata.Version")
     drilldown_parser.add_argument("--output", help="Output directory; defaults to <DCP>/dist/service_drilldown_<Service_ID>")
+    drilldown_parser.add_argument("--depth", type=int, default=1, help="Relationship traversal depth; default is 1")
+    drilldown_parser.add_argument("--direction", choices=["upstream", "downstream", "both"], default="both", help="Traversal direction; default is both")
+    drilldown_parser.add_argument("--theme", choices=["auto", "light", "dark", "security"], default="auto", help="Diagram theme; default is auto")
+    drilldown_parser.add_argument("--risk-focus", action="store_true", help="Keep the service context but emphasize non-final or elevated-risk relationships")
 
     port_parser = subparsers.add_parser("query-port", help="Query ports, dependencies, firewall, and monitoring for one service")
     port_parser.add_argument("--input", required=True, help="DCP directory or workbook path")
@@ -125,7 +129,15 @@ def main(argv: list[str] | None = None) -> int:
         version = args.version or inferred_version
         output_root = Path(args.output).resolve() if args.output else default_build_output(input_dir) / f"service_drilldown_{args.service_id}"
         state = load_state(input_dir, output_root, env, version, clean_output=False)
-        outputs = run_service_drilldown(state, args.service_id, output_root)
+        outputs = run_service_drilldown(
+            state,
+            args.service_id,
+            output_root,
+            depth=args.depth,
+            direction=args.direction,
+            theme=args.theme,
+            risk_focus=args.risk_focus,
+        )
         _print_summary(state)
         print(f"Service drilldown: {args.service_id}")
         for output in outputs:

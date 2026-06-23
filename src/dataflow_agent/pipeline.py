@@ -71,8 +71,16 @@ def run_render(state: PipelineState) -> None:
     render_diagrams(state.graph, state.paths.diagrams_dir)
 
 
-def run_service_drilldown(state: PipelineState, service_id: str, output_dir: Path) -> list[Path]:
-    return render_service_drilldown(state.graph, service_id, output_dir)
+def run_service_drilldown(
+    state: PipelineState,
+    service_id: str,
+    output_dir: Path,
+    depth: int = 1,
+    direction: str = "both",
+    theme: str = "auto",
+    risk_focus: bool = False,
+) -> list[Path]:
+    return render_service_drilldown(state.graph, service_id, output_dir, depth=depth, direction=direction, theme=theme, risk_focus=risk_focus)
 
 
 def run_report(state: PipelineState, env: str, version: str) -> None:

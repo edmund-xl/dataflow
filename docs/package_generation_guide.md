@@ -38,6 +38,12 @@ scripts/merge_dcp.sh path/to/DCP_A path/to/DCP_B
 scripts/query_service_ports.sh path/to/DCP_v0.1 svc-rpc-api
 ```
 
+服务下钻图支持更细粒度的审查参数：
+
+```bash
+scripts/build_service_drilldown.sh path/to/DCP_v0.1 svc-rpc-api --depth 2 --direction downstream --theme dark --risk-focus
+```
+
 ## 五、后续路线图
 
 Meegle 同步、GCP 只读采集和版本 Diff 是后续阶段能力；当前默认流程不连接外部系统，也不处理凭证。
@@ -84,6 +90,12 @@ To inspect one service's ports, upstream/downstream dependencies, firewall rules
 
 ```bash
 scripts/query_service_ports.sh path/to/DCP_v0.1 svc-rpc-api
+```
+
+Service drilldown diagrams support more granular review options:
+
+```bash
+scripts/build_service_drilldown.sh path/to/DCP_v0.1 svc-rpc-api --depth 2 --direction downstream --theme dark --risk-focus
 ```
 
 ## 5. Roadmap
