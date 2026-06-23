@@ -9,7 +9,7 @@ from reportlab.lib.pagesizes import landscape, letter
 from reportlab.pdfgen import canvas
 
 from .models import GraphEdge, GraphModel, GraphNode
-from .util import xml_escape
+from .util import safe_id, xml_escape
 
 
 @dataclass(frozen=True)
@@ -128,15 +128,93 @@ def render_diagrams(graph: GraphModel, diagrams_dir: Path) -> list[Path]:
     return outputs
 
 
+def render_service_drilldown(graph: GraphModel, service_id: str, diagrams_dir: Path) -> list[Path]:
+    if service_id not in graph.nodes or graph.nodes[service_id].type != "service":
+        raise ValueError(f"Service {service_id} does not exist in graph.")
+    diagrams_dir.mkdir(parents=True, exist_ok=True)
+    nodes, edges = _select_service_drilldown(graph, service_id)
+    positions = _layout(nodes)
+    base = f"service_drilldown_{safe_id(service_id)}"
+    view = View(base, f"Service Drilldown: {service_id}", {node.type for node in nodes}, {edge.type for edge in edges})
+    return [
+        _write_svg(diagrams_dir / f"{base}.svg", view, nodes, edges, positions),
+        _write_png(diagrams_dir / f"{base}.png", view, nodes, edges, positions),
+        _write_pdf(diagrams_dir / f"{base}.pdf", view, nodes, edges, positions),
+        _write_mermaid(diagrams_dir / f"{base}.mmd", view, nodes, edges),
+    ]
+
+
 def _select_view(graph: GraphModel, view: View) -> tuple[list[GraphNode], list[GraphEdge]]:
     included_edges = [edge for edge in graph.edges if edge.type in view.edge_types]
     node_ids = {edge.source for edge in included_edges}.union(edge.target for edge in included_edges)
     nodes = [node for node in graph.nodes.values() if node.type in view.node_types or node.id in node_ids]
     node_ids = {node.id for node in nodes}
     edges = [edge for edge in included_edges if edge.source in node_ids and edge.target in node_ids]
+    if view.filename == "00_overview":
+        nodes, edges = _denoise_overview(nodes, edges)
     if not nodes:
         nodes = list(graph.nodes.values())[:12]
     return nodes, edges
+
+
+def _denoise_overview(nodes: list[GraphNode], edges: list[GraphEdge]) -> tuple[list[GraphNode], list[GraphEdge]]:
+    node_by_id = {node.id: node for node in nodes}
+    keep: set[str] = set()
+    for node in nodes:
+        priority = node.metadata.get("priority", "")
+        text = f"{node.id} {node.label} {node.metadata.get('role', '')}".lower()
+        if node.type in {"gcp_project", "lb", "entry_point", "data_asset", "external_service", "cloud_armor_policy", "monitoring_control"}:
+            keep.add(node.id)
+        elif node.type == "service" and (priority in {"P0", "P1"} or any(token in text for token in ("rpc", "sequencer", "database", "nginx", "da "))):
+            keep.add(node.id)
+    changed = True
+    while changed:
+        changed = False
+        for edge in edges:
+            source = node_by_id.get(edge.source)
+            target = node_by_id.get(edge.target)
+            if not source or not target:
+                continue
+            if edge.type == "runs_on" and edge.source in keep and edge.target not in keep:
+                keep.add(edge.target)
+                changed = True
+            if edge.type in {"calls", "calls_external", "reads_from", "writes_to"} and (edge.source in keep or edge.target in keep):
+                if source.type == "service" and source.metadata.get("priority", "") in {"P0", "P1"}:
+                    keep.add(edge.source)
+                if target.type in {"service", "data_asset", "external_service"}:
+                    keep.add(edge.target)
+            if edge.type in {"allowed_by", "protected_by", "monitored_by"} and edge.source in keep:
+                keep.add(edge.target)
+    filtered_nodes = [node for node in nodes if node.id in keep]
+    filtered_ids = {node.id for node in filtered_nodes}
+    filtered_edges = [edge for edge in edges if edge.source in filtered_ids and edge.target in filtered_ids]
+    return filtered_nodes or nodes, filtered_edges or edges
+
+
+def _select_service_drilldown(graph: GraphModel, service_id: str) -> tuple[list[GraphNode], list[GraphEdge]]:
+    node_ids = {service_id}
+    selected_edges: list[GraphEdge] = []
+    for edge in graph.edges:
+        if edge.source == service_id or edge.target == service_id:
+            selected_edges.append(edge)
+            node_ids.update({edge.source, edge.target})
+    changed = True
+    while changed:
+        changed = False
+        for edge in graph.edges:
+            if edge.type in {"has_binding", "allowed_by", "monitored_by"} and (edge.source in node_ids or edge.target in node_ids):
+                before = len(node_ids)
+                selected_edges.append(edge)
+                node_ids.update({edge.source, edge.target})
+                changed = changed or len(node_ids) != before
+    deduped_edges: list[GraphEdge] = []
+    seen_edges: set[str] = set()
+    for edge in selected_edges:
+        if edge.id not in seen_edges:
+            deduped_edges.append(edge)
+            seen_edges.add(edge.id)
+    nodes = [node for node in graph.nodes.values() if node.id in node_ids]
+    return nodes, deduped_edges
 
 
 def _layout(nodes: list[GraphNode]) -> dict[str, tuple[int, int]]:
@@ -187,11 +265,12 @@ def _write_svg(path: Path, view: View, nodes: list[GraphNode], edges: list[Graph
         if edge.source not in positions or edge.target not in positions:
             continue
         dashed = _edge_is_control(edge)
+        edge_color = _edge_color(edge, dark, palette)
         points = _edge_curve_points(positions[edge.source], positions[edge.target])
         path_data = _svg_path(points)
         dash = ' stroke-dasharray="8 7"' if dashed else ""
         width_attr = "1.8" if dashed else "2.2"
-        lines.append(f'<path d="{path_data}" fill="none" stroke="{palette["edge"]}" stroke-width="{width_attr}" marker-end="url(#arrow)" opacity="{palette["edge_opacity"]}"{dash}/>')
+        lines.append(f'<path d="{path_data}" fill="none" stroke="{edge_color}" stroke-width="{width_attr}" marker-end="url(#arrow)" opacity="{palette["edge_opacity"]}"{dash}/>')
         label = _edge_label(edge)
         if label:
             lx, ly = _edge_label_position(points)
@@ -235,8 +314,9 @@ def _write_png(path: Path, view: View, nodes: list[GraphNode], edges: list[Graph
             continue
         points = _sampled_edge_points(positions[edge.source], positions[edge.target])
         dashed = _edge_is_control(edge)
-        _draw_polyline(draw, points, palette["edge"], width=3 if not dashed else 2, dashed=dashed)
-        _draw_arrowhead(draw, points[-2], points[-1], palette["edge"])
+        edge_color = _edge_color(edge, dark, palette)
+        _draw_polyline(draw, points, edge_color, width=3 if not dashed else 2, dashed=dashed)
+        _draw_arrowhead(draw, points[-2], points[-1], edge_color)
         label = _edge_label(edge)
         if label:
             lx, ly = _edge_label_position(_edge_curve_points(positions[edge.source], positions[edge.target]))
@@ -285,13 +365,14 @@ def _write_pdf(path: Path, view: View, nodes: list[GraphNode], edges: list[Graph
             continue
         p0, _p1, _p2, p3 = _edge_curve_points(positions[edge.source], positions[edge.target])
         dashed = _edge_is_control(edge)
-        _pdf_stroke(c, palette["edge"])
+        edge_color = _edge_color(edge, dark, palette)
+        _pdf_stroke(c, edge_color)
         c.setLineWidth(1.4 if dashed else 1.8)
         if dashed:
             c.setDash(7, 5)
         c.line(p0[0], page_height - p0[1], p3[0], page_height - p3[1])
         c.setDash()
-        _draw_pdf_arrowhead(c, p0, p3, page_height, palette["edge"])
+        _draw_pdf_arrowhead(c, p0, p3, page_height, edge_color)
         label = _edge_label(edge)
         if label:
             lx, ly = (p0[0] + p3[0]) / 2, (p0[1] + p3[1]) / 2 - 4
@@ -314,21 +395,33 @@ def _write_pdf(path: Path, view: View, nodes: list[GraphNode], edges: list[Graph
 def _write_mermaid(path: Path, view: View, nodes: list[GraphNode], edges: list[GraphEdge]) -> Path:
     lines = ["flowchart LR", f"  %% {view.title}"]
     for node in nodes:
-        lines.append(f"  {_mmd_id(node.id)}[\"{node.label} ({node.type})\"]")
+        status = _status_kind(node.status)
+        status_text = f"\\n{node.status}" if status != "confirmed" else ""
+        class_suffix = f":::{status}" if status != "confirmed" else ""
+        lines.append(f"  {_mmd_id(node.id)}[\"{node.label} ({node.type}){status_text}\"]{class_suffix}")
     node_ids = {node.id for node in nodes}
     for edge in edges:
         if edge.source in node_ids and edge.target in node_ids:
-            label = f"|{edge.type}|" if not edge.label else f"|{edge.type}: {edge.label}|"
+            edge_label = _edge_label(edge)
+            label = f"|{edge.type}: {edge_label}|" if edge_label else f"|{edge.type}|"
             lines.append(f"  {_mmd_id(edge.source)} -->{label} {_mmd_id(edge.target)}")
+    lines.extend(
+        [
+            "  classDef auto stroke-dasharray: 6 4,stroke:#6366f1;",
+            "  classDef pending stroke-dasharray: 6 4,stroke:#f59e0b,fill:#fff7ed;",
+            "  classDef exception stroke:#a855f7,fill:#faf5ff;",
+        ]
+    )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
 
 
 def _append_svg_node(lines: list[str], node: GraphNode, x: int, y: int, dark: bool, palette: dict[str, str]) -> None:
-    style = _node_style(node, dark)
+    status = _status_kind(node.status)
+    style = _status_node_style(_node_style(node, dark), status, dark)
     text_color = palette["text"]
     subtext = palette["muted"]
-    dash = ' stroke-dasharray="6 4"' if node.status == "Auto_Detected" else ""
+    dash = ' stroke-dasharray="6 4"' if status in {"auto", "pending"} else ""
     lines.append(f'<g filter="url(#cardShadow)">')
     lines.append(f'<rect x="{x}" y="{y}" width="{NODE_WIDTH}" height="{NODE_HEIGHT}" rx="12" fill="{style.fill}" stroke="{style.stroke}" stroke-width="1.3"{dash}/>')
     lines.append(f'<rect x="{x}" y="{y}" width="8" height="{NODE_HEIGHT}" rx="4" fill="{style.accent}"/>')
@@ -339,9 +432,12 @@ def _append_svg_node(lines: list[str], node: GraphNode, x: int, y: int, dark: bo
     detail = _node_detail(node)
     if detail:
         lines.append(f'<text x="{x + 18}" y="{y + 76}" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="{subtext}">{xml_escape(_clip(detail, 31))}</text>')
-    if node.status == "Auto_Detected":
-        lines.append(f'<rect x="{x + NODE_WIDTH - 52}" y="{y + 12}" width="38" height="18" rx="9" fill="{palette["status_bg"]}" stroke="{style.stroke}" stroke-width="0.6"/>')
-        lines.append(f'<text x="{x + NODE_WIDTH - 33}" y="{y + 25}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9" font-weight="700" fill="{palette["status_text"]}">AUTO</text>')
+    badge = _status_badge(status)
+    if badge:
+        badge_text, badge_bg, badge_fg = badge
+        badge_width = max(38, len(badge_text) * 6 + 16)
+        lines.append(f'<rect x="{x + NODE_WIDTH - badge_width - 14}" y="{y + 12}" width="{badge_width}" height="18" rx="9" fill="{badge_bg}" stroke="{style.stroke}" stroke-width="0.6"/>')
+        lines.append(f'<text x="{x + NODE_WIDTH - badge_width / 2 - 14:.1f}" y="{y + 25}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9" font-weight="700" fill="{badge_fg}">{badge_text}</text>')
     lines.append("</g>")
 
 
@@ -374,9 +470,11 @@ def _draw_png_node(
     small_font: ImageFont.ImageFont,
 ) -> None:
     style = _node_style(node, dark)
+    status = _status_kind(node.status)
+    style = _status_node_style(style, status, dark)
     shadow = "#000000" if dark else "#D3DAE7"
     draw.rounded_rectangle((x + 3, y + 5, x + NODE_WIDTH + 3, y + NODE_HEIGHT + 5), radius=12, fill=shadow)
-    draw.rounded_rectangle((x, y, x + NODE_WIDTH, y + NODE_HEIGHT), radius=12, fill=style.fill, outline=style.stroke, width=2 if node.status == "Auto_Detected" else 1)
+    draw.rounded_rectangle((x, y, x + NODE_WIDTH, y + NODE_HEIGHT), radius=12, fill=style.fill, outline=style.stroke, width=2 if status != "confirmed" else 1)
     draw.rounded_rectangle((x, y, x + 8, y + NODE_HEIGHT), radius=4, fill=style.accent)
     draw.text((x + 18, y + 10), _display_type(node.type), fill=style.accent, font=small_font)
     for idx, line in enumerate(_wrap_label(node.label, 27, 2)):
@@ -384,10 +482,13 @@ def _draw_png_node(
     detail = _node_detail(node)
     if detail:
         draw.text((x + 18, y + 68), _clip(detail, 31), fill=palette["muted"], font=meta_font)
-    if node.status == "Auto_Detected":
-        badge = (x + NODE_WIDTH - 52, y + 12, x + NODE_WIDTH - 14, y + 30)
-        draw.rounded_rectangle(badge, radius=9, fill=palette["status_bg"], outline=style.stroke)
-        draw.text((badge[0] + 8, badge[1] + 3), "AUTO", fill=palette["status_text"], font=small_font)
+    badge = _status_badge(status)
+    if badge:
+        badge_text, badge_bg, badge_fg = badge
+        badge_width = max(38, len(badge_text) * 6 + 16)
+        badge_box = (x + NODE_WIDTH - badge_width - 14, y + 12, x + NODE_WIDTH - 14, y + 30)
+        draw.rounded_rectangle(badge_box, radius=9, fill=badge_bg, outline=style.stroke)
+        draw.text((badge_box[0] + 8, badge_box[1] + 3), badge_text, fill=badge_fg, font=small_font)
 
 
 def _draw_png_legend(draw: ImageDraw.ImageDraw, width: int, nodes: list[GraphNode], dark: bool, palette: dict[str, str], font: ImageFont.ImageFont) -> None:
@@ -407,11 +508,12 @@ def _draw_png_legend(draw: ImageDraw.ImageDraw, width: int, nodes: list[GraphNod
 
 
 def _draw_pdf_node(c: canvas.Canvas, node: GraphNode, x: int, y: int, page_height: float, dark: bool, palette: dict[str, str]) -> None:
-    style = _node_style(node, dark)
+    status = _status_kind(node.status)
+    style = _status_node_style(_node_style(node, dark), status, dark)
     pdf_y = page_height - y - NODE_HEIGHT
     _pdf_fill(c, style.fill)
     _pdf_stroke(c, style.stroke)
-    if node.status == "Auto_Detected":
+    if status in {"auto", "pending"}:
         c.setDash(6, 4)
     c.roundRect(x, pdf_y, NODE_WIDTH, NODE_HEIGHT, 12, fill=1, stroke=1)
     c.setDash()
@@ -429,13 +531,16 @@ def _draw_pdf_node(c: canvas.Canvas, node: GraphNode, x: int, y: int, page_heigh
         _pdf_fill(c, palette["muted"])
         c.setFont("Helvetica", 7)
         c.drawString(x + 18, page_height - y - 75, _clip(detail, 36))
-    if node.status == "Auto_Detected":
-        _pdf_fill(c, palette["status_bg"])
+    badge = _status_badge(status)
+    if badge:
+        badge_text, badge_bg, badge_fg = badge
+        badge_width = max(38, len(badge_text) * 5 + 16)
+        _pdf_fill(c, badge_bg)
         _pdf_stroke(c, style.stroke)
-        c.roundRect(x + NODE_WIDTH - 52, page_height - y - 30, 38, 18, 9, fill=1, stroke=1)
-        _pdf_fill(c, palette["status_text"])
+        c.roundRect(x + NODE_WIDTH - badge_width - 14, page_height - y - 30, badge_width, 18, 9, fill=1, stroke=1)
+        _pdf_fill(c, badge_fg)
         c.setFont("Helvetica-Bold", 6)
-        c.drawCentredString(x + NODE_WIDTH - 33, page_height - y - 24, "AUTO")
+        c.drawCentredString(x + NODE_WIDTH - badge_width / 2 - 14, page_height - y - 24, badge_text)
 
 
 def _node_style(node: GraphNode, dark: bool) -> NodeStyle:
@@ -458,6 +563,34 @@ def _node_style(node: GraphNode, dark: bool) -> NodeStyle:
         "Other": "#1E293B",
     }
     return NodeStyle(dark_fills.get(base.group, "#1E293B"), base.stroke, base.accent, base.group)
+
+
+def _status_node_style(style: NodeStyle, status: str, dark: bool) -> NodeStyle:
+    if status == "pending":
+        return NodeStyle("#3A2A12" if dark else "#FFF7ED", "#F59E0B", "#F59E0B", style.group)
+    if status == "exception":
+        return NodeStyle("#2D1D3F" if dark else "#FAF5FF", "#A855F7", "#A855F7", style.group)
+    return style
+
+
+def _status_kind(status: str) -> str:
+    if status == "Auto_Detected":
+        return "auto"
+    if status == "Pending_Confirmation":
+        return "pending"
+    if status == "Accepted_Exception":
+        return "exception"
+    return "confirmed"
+
+
+def _status_badge(status: str) -> tuple[str, str, str] | None:
+    if status == "auto":
+        return "AUTO", "#EEF2FF", "#3730A3"
+    if status == "pending":
+        return "PENDING", "#FEF3C7", "#92400E"
+    if status == "exception":
+        return "EXC", "#F3E8FF", "#6B21A8"
+    return None
 
 
 def _legend_items(nodes: list[GraphNode], dark: bool) -> list[tuple[str, str]]:
@@ -605,11 +738,27 @@ def _draw_pdf_arrowhead(c: canvas.Canvas, start: tuple[float, float], end: tuple
 
 
 def _edge_is_control(edge: GraphEdge) -> bool:
-    return edge.type in CONTROL_EDGES or edge.status == "Auto_Detected"
+    return edge.type in CONTROL_EDGES or _status_kind(edge.status) in {"auto", "pending", "exception"}
+
+
+def _edge_color(edge: GraphEdge, dark: bool, palette: dict[str, str]) -> str:
+    status = _status_kind(edge.status)
+    if status == "pending":
+        return "#FBBF24" if dark else "#D97706"
+    if status == "exception":
+        return "#C084FC" if dark else "#9333EA"
+    return palette["edge"]
 
 
 def _edge_label(edge: GraphEdge) -> str:
     value = edge.label.strip() if edge.label else edge.type
+    status = _status_kind(edge.status)
+    if status == "pending":
+        value = f"Pending: {value}"
+    elif status == "exception":
+        value = f"Exception: {value}"
+    elif status == "auto":
+        value = f"Auto: {value}"
     return _clip(value.replace("_", " "), 28)
 
 

@@ -17,6 +17,7 @@ from .pipeline import (
     run_render,
     run_report,
     run_risk,
+    run_service_drilldown,
     run_validate,
 )
 
@@ -42,6 +43,13 @@ def main(argv: list[str] | None = None) -> int:
     build_quick_parser.add_argument("--env", help="Environment name; defaults to 00_Metadata.Environment")
     build_quick_parser.add_argument("--version", help="Package version; defaults to 00_Metadata.Version")
     build_quick_parser.add_argument("--output", help="Output directory; defaults to <DCP>/dist")
+
+    drilldown_parser = subparsers.add_parser("drilldown", help="Render a single-service drilldown diagram")
+    drilldown_parser.add_argument("--input", required=True, help="DCP directory or workbook path")
+    drilldown_parser.add_argument("--service-id", required=True, help="Service_ID to render")
+    drilldown_parser.add_argument("--env", help="Environment name; defaults to 00_Metadata.Environment")
+    drilldown_parser.add_argument("--version", help="Package version; defaults to 00_Metadata.Version")
+    drilldown_parser.add_argument("--output", help="Output directory; defaults to <DCP>/dist/service_drilldown_<Service_ID>")
 
     for command in ["validate", "normalize", "build", "risk", "render", "report", "package", "run"]:
         _add_common(subparsers.add_parser(command))
@@ -85,6 +93,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Merge report: {merge_result.merged_dcp / 'merge_report.xlsx'}")
         print(f"Merge duplicates: {merge_result.duplicate_count}")
         print(f"Merge conflicts: {merge_result.conflict_count}")
+        return 0
+
+    if args.command == "drilldown":
+        input_dir = Path(args.input).resolve()
+        inferred_env, inferred_version = infer_env_version(input_dir)
+        env = args.env or inferred_env
+        version = args.version or inferred_version
+        output_root = Path(args.output).resolve() if args.output else default_build_output(input_dir) / f"service_drilldown_{args.service_id}"
+        state = load_state(input_dir, output_root, env, version, clean_output=False)
+        outputs = run_service_drilldown(state, args.service_id, output_root)
+        _print_summary(state)
+        print(f"Service drilldown: {args.service_id}")
+        for output in outputs:
+            print(f"Drilldown artifact: {output}")
         return 0
 
     input_dir = Path(args.input).resolve()

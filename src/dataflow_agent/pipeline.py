@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .artifacts import write_graph_artifacts, write_normalized_snapshot
 from .constants import RuntimePaths, make_runtime_paths
-from .diagram_renderer import render_diagrams
+from .diagram_renderer import render_diagrams, render_service_drilldown
 from .graph_builder import build_graph
 from .models import Finding, GraphModel, ValidationResult, WorkbookData
 from .normalizer import normalize_workbook
@@ -69,6 +69,10 @@ def run_risk(state: PipelineState) -> None:
 
 def run_render(state: PipelineState) -> None:
     render_diagrams(state.graph, state.paths.diagrams_dir)
+
+
+def run_service_drilldown(state: PipelineState, service_id: str, output_dir: Path) -> list[Path]:
+    return render_service_drilldown(state.graph, service_id, output_dir)
 
 
 def run_report(state: PipelineState, env: str, version: str) -> None:

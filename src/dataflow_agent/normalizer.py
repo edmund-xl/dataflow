@@ -23,7 +23,7 @@ def active_rows(workbook: WorkbookData, sheet: str) -> list[Row]:
 
 
 def formal_rows(workbook: WorkbookData, sheet: str) -> list[Row]:
-    return [row for row in active_rows(workbook, sheet) if row.get("Confirmation_Status") in {"Confirmed", "Auto_Detected", ""}]
+    return [row for row in active_rows(workbook, sheet) if row.get("Confirmation_Status") in {"Confirmed", "Auto_Detected", "Accepted_Exception", ""}]
 
 
 def _normalize_row(row: Row) -> Row:
@@ -39,4 +39,3 @@ def _normalize_row(row: Row) -> Row:
 
 def _is_rejected(row: Row) -> bool:
     return row.get("Confirmation_Status") == "Rejected"
-

@@ -29,7 +29,7 @@ WORKBOOK_CANDIDATES = [
     "dataflow_sample_input_v0.1.xlsx",
 ]
 
-CONFIRMED_STATUSES = {"Confirmed", "Auto_Detected", "Pending_Confirmation"}
+CONFIRMED_STATUSES = {"Confirmed", "Auto_Detected", "Pending_Confirmation", "Accepted_Exception"}
 EXCLUDED_STATUSES = {"Rejected", "Not_Applicable"}
 
 OUTPUT_PACKAGE_PREFIX = "dataflow_package"

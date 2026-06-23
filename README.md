@@ -68,6 +68,14 @@ scripts/merge_dcp.sh DCP_source_a DCP_source_b DCP_source_c
 
 系统会生成合并工作簿、合并报告、完整数据流图交付包和压缩归档。
 
+### 单服务下钻图
+
+需要查看单个服务上下游、运行实例、数据资产、安全控制和监控覆盖时执行：
+
+```bash
+scripts/build_service_drilldown.sh samples/DCP_v0.1 svc-rpc-api
+```
+
 ## 五、工程接口
 
 脚本是日常使用入口。底层命令仍保留给开发和排错使用，包括 `check`、`quick-build`、`merge`、`validate`、`normalize`、`build`、`risk`、`render`、`report`、`package` 和 `run`。
@@ -198,6 +206,14 @@ scripts/merge_dcp.sh DCP_source_a DCP_source_b DCP_source_c
 ```
 
 The system generates a merged workbook, a merge report, a complete data-flow package, and a compressed archive.
+
+### Single-Service Drilldown
+
+To inspect one service's upstream and downstream relationships, runtime instance, data assets, security controls, and monitoring coverage, run:
+
+```bash
+scripts/build_service_drilldown.sh samples/DCP_v0.1 svc-rpc-api
+```
 
 ## 5. Engineering Interface
 

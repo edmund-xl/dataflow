@@ -39,6 +39,9 @@ jobs:
       - name: Run sample merge
         run: dataflow-agent merge samples/DCP_v0.1 samples/DCP_v0.1 --output ci_artifacts/merge
 
+      - name: Run sample service drilldown
+        run: dataflow-agent drilldown --input samples/DCP_v0.1 --service-id svc-rpc-api --output ci_artifacts/drilldown
+
       - name: Verify generated package files
         run: |
           test -f ci_artifacts/build/dataflow_package_v0.1-demo/normalized/dataflow_graph.json
@@ -47,6 +50,7 @@ jobs:
           test -f ci_artifacts/build/dataflow_package_v0.1-demo.zip
           test -f ci_artifacts/merge/merged_dcp_v0.1-demo/merge_report.xlsx
           test -f ci_artifacts/merge/dataflow_package_v0.1-demo.zip
+          test -f ci_artifacts/drilldown/service_drilldown_svc-rpc-api.svg
 
       - name: Upload sample artifacts
         uses: actions/upload-artifact@v4

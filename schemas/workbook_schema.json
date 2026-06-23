@@ -120,7 +120,7 @@
   ],
   "enum_fields": {
     "Environment": ["Mainnet", "Prod", "Production", "Testnetv2", "Devnet", "Staging"],
-    "Confirmation_Status": ["Confirmed", "Auto_Detected", "Pending_Confirmation", "Rejected", "Not_Applicable"],
+    "Confirmation_Status": ["Confirmed", "Auto_Detected", "Pending_Confirmation", "Accepted_Exception", "Rejected", "Not_Applicable"],
     "Included_In_Scope": ["Yes", "No"],
     "Is_High_Privilege": ["Yes", "No"],
     "Logging_Coverage": ["Yes", "No", "Partial", "Unknown"],

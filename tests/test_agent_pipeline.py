@@ -12,7 +12,7 @@ import pytest
 from docx import Document
 
 from dataflow_agent.constants import find_workbook
-from dataflow_agent.diagram_renderer import VIEWS, render_diagrams
+from dataflow_agent.diagram_renderer import VIEWS, render_diagrams, render_service_drilldown
 from dataflow_agent.graph_builder import build_graph
 from dataflow_agent.normalizer import normalize_workbook
 from dataflow_agent.pipeline import run_all
@@ -119,10 +119,47 @@ def test_all_diagram_views_render_nonempty_files(tmp_path: Path) -> None:
     legacy = "mega" + "eth"
     assert "Structurizr/C4-style architecture view" in overview_svg
     assert "Legend" in overview_svg
+    assert "Subnet" not in overview_svg
     assert "Security Review Focus" in security_svg
     assert "#101827" in security_svg
     assert legacy not in overview_svg.lower()
     assert legacy not in security_svg.lower()
+
+
+def test_diagrams_show_non_final_statuses(tmp_path: Path) -> None:
+    schema = load_schema()
+    workbook = read_workbook(SAMPLE_WORKBOOK, schema)
+    workbook.sheets["04_Services"][0]["Confirmation_Status"] = "Pending_Confirmation"
+    workbook.sheets["04_Services"][1]["Confirmation_Status"] = "Accepted_Exception"
+    workbook.sheets["04_Services"][2]["Confirmation_Status"] = "Auto_Detected"
+    normalized = normalize_workbook(workbook, schema)
+    graph = build_graph(normalized)
+
+    render_diagrams(graph, tmp_path)
+
+    overview_svg = (tmp_path / "00_overview.svg").read_text(encoding="utf-8")
+    overview_mmd = (tmp_path / "00_overview.mmd").read_text(encoding="utf-8")
+    assert "PENDING" in overview_svg
+    assert "EXC" in overview_svg
+    assert "AUTO" in overview_svg
+    assert "Pending_Confirmation" in overview_mmd
+    assert "Accepted_Exception" in overview_mmd
+
+
+def test_service_drilldown_renders_expected_artifacts(tmp_path: Path) -> None:
+    schema = load_schema()
+    workbook = normalize_workbook(read_workbook(SAMPLE_WORKBOOK, schema), schema)
+    graph = build_graph(workbook)
+
+    outputs = render_service_drilldown(graph, "svc-rpc-api", tmp_path)
+
+    assert len(outputs) == 4
+    for path in outputs:
+        assert path.exists()
+        assert path.stat().st_size > 100
+    svg = (tmp_path / "service_drilldown_svc-rpc-api.svg").read_text(encoding="utf-8")
+    assert "Service Drilldown: svc-rpc-api" in svg
+    assert "RPC API" in svg
 
 
 def test_cli_input_can_be_copied_to_fresh_dcp(tmp_path: Path) -> None:
@@ -170,11 +207,22 @@ def test_script_merge_dcp_runs_with_defaults() -> None:
     assert package_zips
 
 
+def test_script_service_drilldown_runs_with_defaults() -> None:
+    subprocess.run(["scripts/build_service_drilldown.sh", "samples/DCP_v0.1", "svc-rpc-api"], cwd=ROOT, check=True, env=_script_env())
+
+    output_dir = SAMPLE_DCP / "dist" / "service_drilldown_svc-rpc-api"
+    assert (output_dir / "service_drilldown_svc-rpc-api.svg").exists()
+    assert (output_dir / "service_drilldown_svc-rpc-api.png").exists()
+    assert (output_dir / "service_drilldown_svc-rpc-api.pdf").exists()
+    assert (output_dir / "service_drilldown_svc-rpc-api.mmd").exists()
+
+
 def test_scripts_do_not_embed_personal_python_paths() -> None:
     for path in [
         ROOT / "scripts" / "check_dcp.sh",
         ROOT / "scripts" / "build_dataflow_package.sh",
         ROOT / "scripts" / "merge_dcp.sh",
+        ROOT / "scripts" / "build_service_drilldown.sh",
     ]:
         text = path.read_text(encoding="utf-8")
         assert "DATAFLOW_PYTHON" in text
@@ -235,6 +283,7 @@ def test_github_actions_ci_covers_core_flow() -> None:
     assert "dataflow-agent check samples/DCP_v0.1" in workflow
     assert "dataflow-agent quick-build samples/DCP_v0.1" in workflow
     assert "dataflow-agent merge samples/DCP_v0.1 samples/DCP_v0.1" in workflow
+    assert "dataflow-agent drilldown --input samples/DCP_v0.1 --service-id svc-rpc-api" in workflow
     assert "actions/upload-artifact@v4" in workflow
 
 
