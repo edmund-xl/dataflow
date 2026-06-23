@@ -48,9 +48,9 @@ def _write_summary(
         "",
         "如果状态为 `NEEDS_FIX`，请先阅读修复清单并修改源工作簿，然后重新运行自检脚本。",
         "",
-        "## 三、版权与授权",
+        "## 三、开源授权",
         "",
-        "本项目版权归属 edmund-xl，并采用保留全部权利的私有授权。未经 edmund-xl 事先书面许可，不得复制、修改、分发或商用。完整授权文本见仓库根目录 `LICENSE` 文件。",
+        "本项目采用 MIT License 开源授权。版权归属 edmund-xl；使用者可以在遵守许可证条款的前提下复制、使用、修改、分发和商用本软件副本。完整授权文本见仓库根目录 `LICENSE` 文件。",
         "",
         "---",
         "",
@@ -78,9 +78,9 @@ def _write_summary(
         "",
         "If the status is `NEEDS_FIX`, read the fix list, correct the source workbook, and run the self-check script again.",
         "",
-        "## 3. Copyright And License",
+        "## 3. Open-Source License",
         "",
-        "This project is proprietary to edmund-xl and all rights are reserved. No copying, modification, distribution, or commercial use is permitted without prior written permission from edmund-xl. The full license text is available in the repository root `LICENSE` file.",
+        "This project is released under the MIT License. Copyright remains with edmund-xl, and users may copy, use, modify, distribute, and use the software commercially subject to the license terms. The full license text is available in the repository root `LICENSE` file.",
         "",
     ]
     path.write_text("\n".join(lines), encoding="utf-8")
@@ -89,7 +89,7 @@ def _write_summary(
 def _write_fix_list(path: Path, findings: list[Finding]) -> None:
     if not findings:
         path.write_text(
-            "# 中文版本\n\n# 修复清单\n\n无校验或风险问题。\n\n## 版权与授权\n\n本项目版权归属 edmund-xl，并采用保留全部权利的私有授权。未经 edmund-xl 事先书面许可，不得复制、修改、分发或商用。完整授权文本见仓库根目录 `LICENSE` 文件。\n\n---\n\n# English Version\n\n# Fix List\n\nNo validation or risk findings.\n\n## Copyright And License\n\nThis project is proprietary to edmund-xl and all rights are reserved. No copying, modification, distribution, or commercial use is permitted without prior written permission from edmund-xl. The full license text is available in the repository root `LICENSE` file.\n",
+            "# 中文版本\n\n# 修复清单\n\n无校验或风险问题。\n\n## 开源授权\n\n本项目采用 MIT License 开源授权。版权归属 edmund-xl；使用者可以在遵守许可证条款的前提下复制、使用、修改、分发和商用本软件副本。完整授权文本见仓库根目录 `LICENSE` 文件。\n\n---\n\n# English Version\n\n# Fix List\n\nNo validation or risk findings.\n\n## Open-Source License\n\nThis project is released under the MIT License. Copyright remains with edmund-xl, and users may copy, use, modify, distribute, and use the software commercially subject to the license terms. The full license text is available in the repository root `LICENSE` file.\n",
             encoding="utf-8",
         )
         return
@@ -118,9 +118,9 @@ def _write_fix_list(path: Path, findings: list[Finding]) -> None:
         )
     lines.extend(
         [
-            "## 版权与授权",
+            "## 开源授权",
             "",
-            "本项目版权归属 edmund-xl，并采用保留全部权利的私有授权。未经 edmund-xl 事先书面许可，不得复制、修改、分发或商用。完整授权文本见仓库根目录 `LICENSE` 文件。",
+            "本项目采用 MIT License 开源授权。版权归属 edmund-xl；使用者可以在遵守许可证条款的前提下复制、使用、修改、分发和商用本软件副本。完整授权文本见仓库根目录 `LICENSE` 文件。",
             "",
             "---",
             "",
@@ -132,9 +132,9 @@ def _write_fix_list(path: Path, findings: list[Finding]) -> None:
             "",
             "This document lists findings that require correction. Address higher-severity issues first, then pending confirmations and ordinary risks.",
             "",
-            "## Copyright And License",
+            "## Open-Source License",
             "",
-            "This project is proprietary to edmund-xl and all rights are reserved. No copying, modification, distribution, or commercial use is permitted without prior written permission from edmund-xl. The full license text is available in the repository root `LICENSE` file.",
+            "This project is released under the MIT License. Copyright remains with edmund-xl, and users may copy, use, modify, distribute, and use the software commercially subject to the license terms. The full license text is available in the repository root `LICENSE` file.",
             "",
         ]
     )

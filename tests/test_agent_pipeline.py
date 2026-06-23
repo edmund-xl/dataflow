@@ -223,10 +223,30 @@ def test_role_terms_are_neutral_in_docs_and_generated_templates() -> None:
 
 def test_license_and_generic_naming_are_enforced() -> None:
     license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
-    assert license_text.startswith("Proprietary License")
-    assert "Copyright (c) 2026 edmund-xl. All rights reserved." in license_text
-    assert "No permission is granted" in license_text
-    assert 'license = "LicenseRef-Proprietary"' in (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert license_text.startswith("MIT License")
+    assert "Copyright (c) 2026 edmund-xl" in license_text
+    assert "Permission is hereby granted, free of charge" in license_text
+    assert 'license = "MIT"' in (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    forbidden_license_terms = [
+        "Pro" + "prietary",
+        "pro" + "prietary",
+        "all rights" + " are reserved",
+        "No permission" + " is granted",
+    ]
+    for path in [
+        ROOT / "README.md",
+        ROOT / "LICENSE",
+        ROOT / "pyproject.toml",
+        ROOT / "src" / "dataflow_agent" / "packager.py",
+        ROOT / "src" / "dataflow_agent" / "report_generator.py",
+        ROOT / "src" / "dataflow_agent" / "summaries.py",
+        ROOT / "docs" / "collector_quick_check_guide.md",
+        ROOT / "docs" / "aggregation_operator_guide.md",
+        ROOT / "docs" / "dataflow_agent_input_contract_v0.1.md",
+    ]:
+        text = path.read_text(encoding="utf-8")
+        for term in forbidden_license_terms:
+            assert term not in text
     legacy = "mega" + "eth"
     text_paths = [
         path

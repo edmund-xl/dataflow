@@ -97,9 +97,9 @@ templates/dataflow_v1.0/
 python -m pytest -q
 ```
 
-## 八、版权与授权
+## 八、开源授权
 
-本项目版权归属 edmund-xl，并采用保留全部权利的私有授权。未经 edmund-xl 事先书面许可，不得复制、修改、合并、发布、分发、再授权、销售，或将本软件用于商业或生产目的。完整授权文本见仓库根目录 `LICENSE` 文件。
+本项目采用 MIT License 开源授权。版权归属 edmund-xl；使用者可以在遵守许可证条款的前提下复制、使用、修改、合并、发布、分发、再授权和销售本软件副本。完整授权文本见仓库根目录 `LICENSE` 文件。
 
 ## 九、结论
 
@@ -210,9 +210,9 @@ Automated tests validate reading, validation, graph construction, rendering, rep
 python -m pytest -q
 ```
 
-## 8. Copyright And License
+## 8. Open-Source License
 
-This project is proprietary to edmund-xl and all rights are reserved. No permission is granted to copy, modify, merge, publish, distribute, sublicense, sell, or use this software for commercial or production purposes without prior written permission from edmund-xl. The full license text is available in the repository root `LICENSE` file.
+This project is released under the MIT License. Copyright remains with edmund-xl, and users may copy, use, modify, merge, publish, distribute, sublicense, and sell copies of the software subject to the license terms. The full license text is available in the repository root `LICENSE` file.
 
 ## 9. Conclusion
 

@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Deterministic CLI agent for Dataflow Project data flow validation, graph generation, diagrams, reports, and packaging."
 readme = "README.md"
 requires-python = ">=3.11"
-license = "LicenseRef-Proprietary"
+license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
   "openpyxl>=3.1",

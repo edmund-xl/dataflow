@@ -33,7 +33,7 @@ def write_package_metadata(
         "validation_finding_count": len(validation_findings),
         "risk_finding_count": len(risk_findings),
         "blocking_validation_finding_count": len([f for f in validation_findings if f.severity in {"P0", "P1"}]),
-        "license": "Proprietary; all rights reserved by edmund-xl",
+        "license": "MIT License",
     }
     (paths.package_dir / "metadata.json").write_text(json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8")
     return metadata
@@ -67,7 +67,7 @@ def write_package_readme(paths: RuntimePaths, metadata: dict) -> None:
         f"- 校验问题数量：{metadata['validation_finding_count']}",
         f"- 风险问题数量：{metadata['risk_finding_count']}",
         f"- 阻断级校验问题数量：{metadata['blocking_validation_finding_count']}",
-        f"- 版权与授权：{metadata['license']}",
+        f"- 开源授权：{metadata['license']}",
         "",
         "## 三、结论",
         "",
@@ -101,7 +101,7 @@ def write_package_readme(paths: RuntimePaths, metadata: dict) -> None:
         f"- Validation finding count: {metadata['validation_finding_count']}",
         f"- Risk finding count: {metadata['risk_finding_count']}",
         f"- Blocking validation finding count: {metadata['blocking_validation_finding_count']}",
-        f"- Copyright and license: {metadata['license']}",
+        f"- Open-source license: {metadata['license']}",
         "",
         "## 3. Conclusion",
         "",
