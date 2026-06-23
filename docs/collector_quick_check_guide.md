@@ -4,7 +4,7 @@
 
 ## 摘要
 
-本文面向信息采集同事，说明如何使用一个脚本完成采集包质量自检。自检流程的目标是让采集者在提交前发现缺失字段、引用错误、证据缺失、待确认关系和关键链路风险，从而减少汇总阶段的返工。
+本文面向信息采集人员，说明如何使用一个脚本完成采集包质量自检。自检流程的目标是让使用者在提交前发现缺失字段、引用错误、证据缺失、待确认关系和关键链路风险，从而减少汇总阶段的返工。
 
 ## 关键词
 
@@ -12,7 +12,7 @@
 
 ## 一、适用范围
 
-本文适用于负责填写 Dataflow Project 数据采集工作簿的同事。使用者不需要理解底层命令，也不需要手工生成图或报告，只需要维护源工作簿并执行自检脚本。
+本文适用于负责填写 Dataflow Project 数据采集工作簿的信息采集人员。使用者不需要理解底层命令，也不需要手工生成图或报告，只需要维护源工作簿并执行自检脚本。
 
 ## 二、输入要求
 
@@ -67,7 +67,7 @@ reports/logic_mapping_validation_report.docx
 
 ## 七、结论
 
-该流程把采集质量判断前移到采集阶段。采集同事不需要手工汇总，也不需要手工画图；只需要根据修复清单完善源工作簿。
+该流程把采集质量判断前移到工作簿填写阶段。信息采集人员不需要手工汇总，也不需要手工画图；只需要根据修复清单完善源工作簿。
 
 ## 八、不可变规则
 
@@ -77,11 +77,11 @@ reports/logic_mapping_validation_report.docx
 
 # English Version
 
-# Collector Self-Check Workflow Engineering White Paper
+# Information Collection Self-Check Workflow Engineering White Paper
 
 ## Abstract
 
-This document is for data collectors and explains how to validate a collection package with one script. The goal is to help collectors identify missing fields, broken references, missing evidence, pending relationships, and key-path risks before submission, thereby reducing rework during aggregation.
+This document is for information collection personnel and explains how to validate a collection package with one script. The goal is to help users identify missing fields, broken references, missing evidence, pending relationships, and key-path risks before submission, thereby reducing rework during aggregation.
 
 ## Keywords
 
@@ -89,7 +89,7 @@ Data collection; Data Collection Package; self-check; fix list; quality gate.
 
 ## 1. Scope
 
-This document applies to colleagues who fill in the Dataflow Project collection workbook. Users do not need to understand lower-level commands or manually generate diagrams and reports. They only need to maintain the source workbook and run the self-check script.
+This document applies to information collection personnel who fill in the Dataflow Project collection workbook. Users do not need to understand lower-level commands or manually generate diagrams and reports. They only need to maintain the source workbook and run the self-check script.
 
 ## 2. Input Requirements
 
@@ -144,7 +144,7 @@ This project is proprietary to edmund-xl and all rights are reserved. No copying
 
 ## 7. Conclusion
 
-This workflow moves data-quality assessment into the collection stage. Collectors do not need to manually aggregate data or draw diagrams. They only need to improve the source workbook according to the fix list.
+This workflow moves data-quality assessment into the workbook filling stage. Information collection personnel do not need to manually aggregate data or draw diagrams. They only need to improve the source workbook according to the fix list.
 
 ## 8. Invariant Rule
 

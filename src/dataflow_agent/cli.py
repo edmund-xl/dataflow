@@ -25,7 +25,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="dataflow-agent", description="Dataflow Project Dataflow Agent")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    check_parser = subparsers.add_parser("check", help="Collector-friendly self-check for one DCP")
+    check_parser = subparsers.add_parser("check", help="Self-check for one DCP")
     check_parser.add_argument("input", help="DCP directory or workbook path")
     check_parser.add_argument("--env", help="Environment name; defaults to 00_Metadata.Environment")
     check_parser.add_argument("--version", help="Package version; defaults to 00_Metadata.Version")

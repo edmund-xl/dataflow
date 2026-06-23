@@ -4,7 +4,7 @@
 
 ## 摘要
 
-本文说明 Dataflow Project 数据流图智能体的建设目标、输入数据模型、自动化处理方法、脚本化使用流程和验证方式。该智能体面向生产环境数据流图交付场景，将信息采集、质量校验、关系建模、风险检查、图表生成、报告生成和交付包归档统一为一条可重复执行的工程流水线。日常使用以脚本为入口，信息采集同事只需要运行自检脚本即可判断采集质量，汇总负责人只需要运行构建或合并脚本即可生成完整交付包。
+本文说明 Dataflow Project 数据流图智能体的建设目标、输入数据模型、自动化处理方法、脚本化使用流程和验证方式。该智能体面向生产环境数据流图交付场景，将信息采集、质量校验、关系建模、风险检查、图表生成、报告生成和交付包归档统一为一条可重复执行的工程流水线。日常使用以脚本为入口，信息采集人员填写工作簿并运行自检脚本，数据汇总负责人收集多份 DCP 并运行构建或合并脚本。
 
 ## 关键词
 
@@ -16,7 +16,7 @@ Dataflow Project 生产环境涉及云项目、网络、服务器、服务、服
 
 ## 二、系统目标
 
-本系统的目标是把数据流图交付从人工整理转为自动化生产线。系统应当满足以下要求：采集同事能够快速自检数据；汇总负责人能够合并多份采集包；所有图、报告和归档包均由同一份结构化数据生成；任何产物错误都回到采集表修正，而不是手工修改生成文件。
+本系统的目标是把数据流图交付从人工整理转为自动化生产线。系统应当满足以下要求：信息采集人员能够快速自检工作簿质量；数据汇总负责人能够合并多份采集包；所有图、报告和归档包均由同一份结构化数据生成；任何产物错误都回到采集表修正，而不是手工修改生成文件。
 
 ## 三、方法设计
 
@@ -26,7 +26,7 @@ Dataflow Project 生产环境涉及云项目、网络、服务器、服务、服
 
 ### 信息采集自检
 
-信息采集同事在采集过程中执行：
+信息采集人员填写或更新工作簿后执行：
 
 ```bash
 scripts/check_dcp.sh samples/DCP_v0.1
@@ -56,10 +56,10 @@ samples/DCP_v0.1/dist/
 
 ### 多个采集包汇总出包
 
-当多个同事分别提交采集包时执行：
+数据汇总负责人收集多份 DCP 后执行：
 
 ```bash
-scripts/merge_dcp.sh DCP_team_a DCP_team_b DCP_team_c
+scripts/merge_dcp.sh DCP_source_a DCP_source_b DCP_source_c
 ```
 
 系统会生成合并工作簿、合并报告、完整数据流图交付包和压缩归档。
@@ -82,7 +82,7 @@ python -m pytest -q
 
 ## 八、结论
 
-该智能体将 Dataflow Project 数据流图交付过程收敛为脚本化、结构化、可重复的工程流程。采集阶段能够即时反馈数据质量，汇总阶段能够自动合并与产出交付包，从而减少手工整理和手工画图带来的偏差。
+该智能体将 Dataflow Project 数据流图交付过程收敛为脚本化、结构化、可重复的工程流程。工作簿填写完成后能够即时反馈数据质量，汇总阶段能够自动合并与产出交付包，从而减少手工整理和手工画图带来的偏差。
 
 ## 九、不可变规则
 
@@ -96,7 +96,7 @@ python -m pytest -q
 
 ## Abstract
 
-This document describes the purpose, input model, automated processing method, script-first workflow, and validation approach of the Dataflow Project Dataflow Agent. The agent supports production data-flow deliverables by turning data collection, quality validation, relationship modeling, risk checks, diagram rendering, report generation, and package archiving into a repeatable engineering pipeline. Daily operation starts from scripts: collectors run one self-check script to assess data quality, and aggregation operators run one build or merge script to produce the final package.
+This document describes the purpose, input model, automated processing method, script-first workflow, and validation approach of the Dataflow Project Dataflow Agent. The agent supports production data-flow deliverables by turning data collection, quality validation, relationship modeling, risk checks, diagram rendering, report generation, and package archiving into a repeatable engineering pipeline. Daily operation starts from scripts: information collection personnel fill in the workbook and run one self-check script, while the data aggregation owner collects multiple DCPs and runs one build or merge script.
 
 ## Keywords
 
@@ -108,7 +108,7 @@ The Dataflow Project production environment contains cloud projects, networks, s
 
 ## 2. Objectives
 
-The objective is to turn data-flow delivery from manual assembly into an automated production line. Collectors should be able to validate their own data quickly. Aggregation operators should be able to merge multiple collection packages. Every diagram, report, and archive should be generated from the same structured data. Any artifact error must be corrected in the workbook and regenerated, not manually edited in the output.
+The objective is to turn data-flow delivery from manual assembly into an automated production line. Information collection personnel should be able to validate workbook quality quickly. The data aggregation owner should be able to merge multiple collection packages. Every diagram, report, and archive should be generated from the same structured data. Any artifact error must be corrected in the workbook and regenerated, not manually edited in the output.
 
 ## 3. Method
 
@@ -116,9 +116,9 @@ The system consumes a Data Collection Package. The workbook is the only structur
 
 ## 4. Script-First Workflow
 
-### Collector Self-Check
+### Information Collection Self-Check
 
-During data collection, collectors run:
+After filling in or updating the workbook, information collection personnel run:
 
 ```bash
 scripts/check_dcp.sh samples/DCP_v0.1
@@ -148,10 +148,10 @@ samples/DCP_v0.1/dist/
 
 ### Merge Multiple Collection Packages
 
-When multiple collectors submit separate packages, run:
+After collecting multiple DCPs, the data aggregation owner runs:
 
 ```bash
-scripts/merge_dcp.sh DCP_team_a DCP_team_b DCP_team_c
+scripts/merge_dcp.sh DCP_source_a DCP_source_b DCP_source_c
 ```
 
 The system generates a merged workbook, a merge report, a complete data-flow package, and a compressed archive.

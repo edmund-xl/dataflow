@@ -12,7 +12,7 @@
 
 ## 一、适用范围
 
-本文适用于需要接收多位采集同事提交结果并生成最终交付包的负责人。该流程不要求负责人手工合并表格、手工修图或手工整理报告。
+本文适用于需要接收多份 DCP 并生成最终交付包的数据汇总负责人。该流程不要求数据汇总负责人手工合并表格、手工修图或手工整理报告。
 
 ## 二、单个采集包出包方法
 
@@ -35,7 +35,7 @@ path/to/DCP_v0.1/dist/
 当存在多个采集包时执行：
 
 ```bash
-scripts/merge_dcp.sh path/to/DCP_team_a path/to/DCP_team_b path/to/DCP_team_c
+scripts/merge_dcp.sh path/to/DCP_source_a path/to/DCP_source_b path/to/DCP_source_c
 ```
 
 默认输出目录为：
@@ -84,7 +84,7 @@ dist/
 
 ## Abstract
 
-This document is for aggregation operators and explains how to merge multiple collection packages and generate the complete Dataflow Project data-flow deliverable with scripts. The workflow delegates de-duplication, conflict detection, quality validation, graph construction, layered diagram rendering, report generation, and archive creation to the agent, so the operator can focus on conflict review and final acceptance.
+This document is for the data aggregation owner and explains how to merge multiple collection packages and generate the complete Dataflow Project data-flow deliverable with scripts. The workflow delegates de-duplication, conflict detection, quality validation, graph construction, layered diagram rendering, report generation, and archive creation to the agent, so the owner can focus on conflict review and final acceptance.
 
 ## Keywords
 
@@ -92,7 +92,7 @@ Data aggregation; collection package merge; conflict report; data flow diagram; 
 
 ## 1. Scope
 
-This document applies to operators who receive submissions from multiple collectors and produce the final delivery package. The workflow does not require manual spreadsheet merging, manual diagram editing, or manual report assembly.
+This document applies to the data aggregation owner who receives multiple DCPs and produces the final delivery package. The workflow does not require manual spreadsheet merging, manual diagram editing, or manual report assembly.
 
 ## 2. Build One Collection Package
 
@@ -115,7 +115,7 @@ The output includes the complete delivery directory and a compressed archive.
 When multiple collection packages exist, run:
 
 ```bash
-scripts/merge_dcp.sh path/to/DCP_team_a path/to/DCP_team_b path/to/DCP_team_c
+scripts/merge_dcp.sh path/to/DCP_source_a path/to/DCP_source_b path/to/DCP_source_c
 ```
 
 The default output directory is:
@@ -128,7 +128,7 @@ The system generates a merged workbook, a merge report, a complete delivery dire
 
 ## 4. Conflict Handling
 
-Rows with the same primary key and identical content are de-duplicated automatically. Rows with the same primary key but different content are recorded in the merge report. The agent keeps the first row for downstream artifact generation by default, but the aggregation operator must review and resolve conflicts before final acceptance.
+Rows with the same primary key and identical content are de-duplicated automatically. Rows with the same primary key but different content are recorded in the merge report. The agent keeps the first row for downstream artifact generation by default, but the data aggregation owner must review and resolve conflicts before final acceptance.
 
 ## 5. Output Structure
 
@@ -150,7 +150,7 @@ This project is proprietary to edmund-xl and all rights are reserved. No copying
 
 ## 7. Conclusion
 
-This workflow turns multi-source aggregation into a repeatable scripted operation. The aggregation operator no longer performs mechanical assembly and can focus on data conflicts, risk confirmation, and final acceptance.
+This workflow turns multi-source aggregation into a repeatable scripted operation. The data aggregation owner no longer performs mechanical assembly and can focus on data conflicts, risk confirmation, and final acceptance.
 
 ## 8. Invariant Rule
 
