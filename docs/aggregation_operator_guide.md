@@ -50,7 +50,7 @@ dist/
 
 ## 四、冲突处理方法
 
-相同主键且内容一致的记录会自动去重。相同主键但内容不一致的记录会进入合并报告。默认情况下，只要存在冲突，智能体会停止生成最终交付包，汇总负责人必须先处理冲突。如果确实需要生成评审草稿，可以追加 `--allow-conflicts`，此时 metadata 和报告会标记为 Draft，不能直接用于最终验收。
+相同主键且内容一致的记录会自动去重。相同主键但内容不一致的记录会进入合并报告和字段级 `conflict_diff.xlsx`。默认情况下，只要存在冲突，智能体会停止生成最终交付包，汇总负责人必须先处理冲突。如果确实需要生成评审草稿，可以追加 `--allow-conflicts`，此时 draft package 采用 first-kept 值，`DRAFT_CONFLICTS.md` 会列出冲突主键、字段、来源行和值，metadata 和报告会标记为 Draft，不能直接用于最终验收。
 
 ## 五、输出结构
 
@@ -132,9 +132,9 @@ The system generates a merged workbook, a merge report, a complete delivery dire
 
 ## 4. Conflict Handling
 
-Rows with the same primary key and identical content are de-duplicated automatically. Rows with the same primary key but different content are recorded in the merge report. The agent keeps the first row for downstream artifact generation by default, but the data aggregation owner must review and resolve conflicts before final acceptance.
+Rows with the same primary key and identical content are de-duplicated automatically. Rows with the same primary key but different content are recorded in the merge report and field-level `conflict_diff.xlsx`. The agent keeps the first row for downstream artifact generation by default, but the data aggregation owner must review and resolve conflicts before final acceptance.
 
-By default, any merge conflict stops final package generation. The data aggregation owner must resolve conflicts first. If a review draft is required, append `--allow-conflicts`; the generated metadata and reports will be marked as Draft and must not be used for final acceptance.
+By default, any merge conflict stops final package generation. The data aggregation owner must resolve conflicts first. If a review draft is required, append `--allow-conflicts`; the generated package uses first-kept values, `DRAFT_CONFLICTS.md` lists conflicting keys, fields, source rows, and values, and the generated metadata and reports will be marked as Draft and must not be used for final acceptance.
 
 ## 5. Output Structure
 

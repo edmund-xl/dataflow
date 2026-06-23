@@ -72,6 +72,7 @@ def _write_logic_mapping_docx(
         [
             ("节点数量", str(len(graph.nodes))),
             ("关系数量", str(len(graph.edges))),
+            ("丢弃关系数量", str(len(graph.dropped_edges))),
             ("校验问题数量", str(len(validation_findings))),
             ("风险问题数量", str(len(risk_findings))),
             ("P0/P1 校验问题数量", str(p0_p1_validation)),
@@ -118,6 +119,7 @@ def _write_logic_mapping_docx(
         [
             ("Graph nodes", str(len(graph.nodes))),
             ("Graph edges", str(len(graph.edges))),
+            ("Dropped graph edges", str(len(graph.dropped_edges))),
             ("Validation findings", str(len(validation_findings))),
             ("Risk findings", str(len(risk_findings))),
             ("P0/P1 validation findings", str(p0_p1_validation)),

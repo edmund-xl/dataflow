@@ -13,6 +13,7 @@ def build_graph(workbook: WorkbookData) -> GraphModel:
     _network_nodes(graph, workbook)
     _server_nodes(graph, workbook)
     _service_nodes(graph, workbook)
+    _runtime_nodes(graph, workbook)
     _data_asset_nodes(graph, workbook)
     _firewall_nodes(graph, workbook)
     _cloud_armor_nodes(graph, workbook)
@@ -29,13 +30,44 @@ def build_graph(workbook: WorkbookData) -> GraphModel:
     return graph
 
 
+NODE_SEMANTICS = {
+    "gcp_project": ("project", "Project", "System"),
+    "network": ("network", "Network", "Container"),
+    "vpc": ("network", "Network", "Container"),
+    "subnet": ("network", "Network", "Container"),
+    "nat": ("network", "Network", "Component"),
+    "lb": ("network", "Network", "Component"),
+    "psc_peering": ("network", "Network", "Component"),
+    "entry_point": ("edge", "Entry", "Component"),
+    "server": ("runtime", "Runtime", "Container"),
+    "runtime": ("runtime", "Runtime", "Container"),
+    "service": ("service", "Service", "Container"),
+    "port": ("interface", "Interface", "Component"),
+    "dependency_ref": ("interface", "Interface", "Component"),
+    "data_asset": ("data", "Data", "Container"),
+    "external_service": ("external", "External", "ExternalSystem"),
+    "firewall_rule": ("security", "Security", "Component"),
+    "cloud_armor_policy": ("security", "Security", "Component"),
+    "service_account": ("identity", "Identity", "Component"),
+    "iam_binding": ("identity", "Identity", "Component"),
+    "monitoring_control": ("monitoring", "Monitoring", "Component"),
+    "cicd_component": ("delivery", "Delivery", "Component"),
+}
+
+
 def _node(row: Row, node_id: str, node_type: str, label: str, sheet: str, **metadata: str) -> GraphNode:
+    layer, group, c4_type = NODE_SEMANTICS.get(node_type, ("other", "Other", "Component"))
+    parent_id = metadata.pop("parent_id", "") or row.get("Project_ID", "") or row.get("Network_ID", "")
     return GraphNode(
         id=node_id,
         type=node_type,
         label=label or node_id,
         sheet=sheet,
         status=row.get("Confirmation_Status", "Confirmed"),
+        layer=metadata.pop("layer", "") or layer,
+        group=metadata.pop("group", "") or group,
+        parent_id=parent_id,
+        c4_type=metadata.pop("c4_type", "") or c4_type,
         metadata={key: value for key, value in metadata.items() if value},
     )
 
@@ -62,10 +94,46 @@ def _server_nodes(graph: GraphModel, workbook: WorkbookData) -> None:
 
 def _service_nodes(graph: GraphModel, workbook: WorkbookData) -> None:
     for row in active_rows(workbook, "04_Services"):
-        graph.add_node(_node(row, row["Service_ID"], "service", row.get("Service_Name") or row["Service_ID"], "04_Services", priority=row.get("Service_Priority", ""), protocol=row.get("Protocol", ""), ports=row.get("Listen_Ports", "")))
+        graph.add_node(
+            _node(
+                row,
+                row["Service_ID"],
+                "service",
+                row.get("Service_Name") or row["Service_ID"],
+                "04_Services",
+                priority=row.get("Service_Priority", ""),
+                protocol=row.get("Protocol", ""),
+                ports=row.get("Listen_Ports", ""),
+                runtime_type=row.get("Runtime_Type", ""),
+                runtime_id=row.get("Runtime_ID", ""),
+            )
+        )
         for port in split_multi(row.get("Listen_Ports", "")):
             port_id = f"port:{row['Service_ID']}:{safe_id(port)}"
             graph.add_node(_node(row, port_id, "port", f"{row.get('Protocol') or 'port'} {port}", "04_Services", service_id=row["Service_ID"]))
+
+
+def _runtime_nodes(graph: GraphModel, workbook: WorkbookData) -> None:
+    for row in active_rows(workbook, "04_Services"):
+        runtime_id = _runtime_node_id(row)
+        runtime_type = row.get("Runtime_Type", "")
+        if not runtime_id:
+            continue
+        label = row.get("Runtime_Name") or row.get("Runtime_ID") or f"{runtime_type or 'Runtime'} for {row.get('Service_ID', '')}"
+        graph.add_node(
+            _node(
+                row,
+                runtime_id,
+                "runtime",
+                label,
+                "04_Services",
+                runtime_type=runtime_type,
+                namespace=row.get("Runtime_Namespace", ""),
+                cluster=row.get("Runtime_Cluster", ""),
+                region=row.get("Runtime_Region", "") or row.get("Location", ""),
+                service_id=row.get("Service_ID", ""),
+            )
+        )
 
 
 def _data_asset_nodes(graph: GraphModel, workbook: WorkbookData) -> None:
@@ -109,20 +177,23 @@ def _contains_edges(graph: GraphModel, workbook: WorkbookData) -> None:
     edge_no = count(1)
     for sheet, node_field in (("02_Networks", "Network_ID"), ("03_Servers", "Instance_ID"), ("06_Data_Assets", "Data_Asset_ID"), ("07_Firewalls", "Firewall_ID")):
         for row in active_rows(workbook, sheet):
-            if row.get("Project_ID") in graph.nodes and row.get(node_field) in graph.nodes:
+            if row.get("Project_ID") or row.get(node_field):
                 graph.add_edge(_edge(edge_no, "contains", row["Project_ID"], row[node_field], "", row))
     for row in active_rows(workbook, "02_Networks"):
         for field, node_type in (("NAT_Name", "nat"), ("LB_Name", "lb"), ("PSC_or_Peering_Name", "psc_peering")):
             node_id = f"{node_type}:{safe_id(row.get(field, ''))}" if row.get(field) else ""
-            if row.get("Network_ID") in graph.nodes and node_id in graph.nodes:
+            if row.get("Network_ID") and node_id:
                 graph.add_edge(_edge(edge_no, "contains", row["Network_ID"], node_id, field, row))
 
 
 def _service_edges(graph: GraphModel, workbook: WorkbookData) -> None:
     edge_no = count(1000)
     for row in active_rows(workbook, "04_Services"):
-        if row.get("Running_On_Instance_ID") in graph.nodes:
+        if row.get("Running_On_Instance_ID"):
             graph.add_edge(_edge(edge_no, "runs_on", row["Service_ID"], row["Running_On_Instance_ID"], "", row))
+        runtime_id = _runtime_node_id(row)
+        if runtime_id:
+            graph.add_edge(_edge(edge_no, "runs_on_runtime", row["Service_ID"], runtime_id, row.get("Runtime_Type", ""), row))
         for port in split_multi(row.get("Listen_Ports", "")):
             port_id = f"port:{row['Service_ID']}:{safe_id(port)}"
             graph.add_edge(_edge(edge_no, "listens_on", row["Service_ID"], port_id, port, row))
@@ -133,13 +204,13 @@ def _dependency_edges(graph: GraphModel, workbook: WorkbookData) -> None:
     for row in active_rows(workbook, "05_Dependencies"):
         source = row.get("Source_Service_ID", "")
         label = " ".join(part for part in [row.get("Target_Port_Protocol", ""), row.get("Target_Port", ""), row.get("Target_Path", "")] if part)
-        if row.get("Target_Service_ID"):
-            graph.add_edge(_edge(edge_no, "calls", source, row["Target_Service_ID"], label, row))
-        if row.get("Target_External_ID"):
-            graph.add_edge(_edge(edge_no, "calls_external", source, row["Target_External_ID"], label, row))
-        if row.get("Target_Data_Asset_ID"):
-            edge_type = "writes_to" if row.get("Direction", "").lower() in {"write", "outbound_write"} else "reads_from"
-            graph.add_edge(_edge(edge_no, edge_type, source, row["Target_Data_Asset_ID"], label, row))
+        explicit_target = _explicit_dependency_target(row)
+        if explicit_target:
+            edge_type, target = explicit_target
+            graph.add_edge(_edge(edge_no, edge_type, source, target, label, row))
+            continue
+        for edge_type, target in _legacy_dependency_targets(row):
+            graph.add_edge(_edge(edge_no, edge_type, source, target, label, row))
     for row in active_rows(workbook, "06_Data_Assets"):
         for service_id in split_multi(row.get("Used_By_Service_ID", "")):
             graph.add_edge(_edge(edge_no, "reads_from", service_id, row["Data_Asset_ID"], row.get("Access_Type", ""), row))
@@ -196,5 +267,117 @@ def _edge(counter: count, edge_type: str, source: str, target: str, label: str, 
         label=label,
         status=row.get("Confirmation_Status", "Confirmed"),
         evidence_id=row.get("Evidence_ID", ""),
+        metadata=_edge_metadata(row),
     )
 
+
+def _edge_metadata(row: Row) -> dict[str, object]:
+    runtime_context = {
+        "runtime_type": row.get("Runtime_Type", ""),
+        "runtime_id": row.get("Runtime_ID", ""),
+        "namespace": row.get("Runtime_Namespace", ""),
+        "cluster": row.get("Runtime_Cluster", ""),
+        "region": row.get("Runtime_Region", "") or row.get("Location", ""),
+    }
+    metadata: dict[str, object] = {
+        "source_sheet": _row_sheet(row),
+        "record_id": row.get("Record_ID", ""),
+        "confirmation_status": row.get("Confirmation_Status", ""),
+        "source_type": row.get("Source_Type", ""),
+        "collected_by": row.get("Collected_By", ""),
+        "environment": row.get("Environment", ""),
+        "evidence_id": row.get("Evidence_ID", "") or row.get("Related_Evidence_ID", ""),
+        "dependency_id": row.get("Dependency_ID", ""),
+        "criticality": row.get("Dependency_Criticality", ""),
+        "interaction_mode": row.get("Interaction_Mode", ""),
+        "target_type": row.get("Target_Type", ""),
+        "target_id": row.get("Target_ID", ""),
+        "runtime_context": {key: value for key, value in runtime_context.items() if value},
+        "risk_tags": _risk_tags(row),
+    }
+    return {key: value for key, value in metadata.items() if value not in ("", {}, [])}
+
+
+def _row_sheet(row: Row) -> str:
+    if row.get("Dependency_ID"):
+        return "05_Dependencies"
+    if row.get("Service_ID"):
+        return "04_Services"
+    if row.get("Firewall_ID"):
+        return "07_Firewalls"
+    if row.get("Data_Asset_ID"):
+        return "06_Data_Assets"
+    if row.get("Policy_ID"):
+        return "08_Cloud_Armor"
+    if row.get("IAM_Binding_ID") or row.get("Service_Account_ID"):
+        return "09_IAM_SA"
+    if row.get("Monitoring_ID"):
+        return "10_Monitoring"
+    if row.get("CICD_ID"):
+        return "11_CICD"
+    if row.get("External_ID"):
+        return "12_External_Services"
+    return ""
+
+
+def _risk_tags(row: Row) -> list[str]:
+    tags: list[str] = []
+    if row.get("Confirmation_Status") == "Pending_Confirmation":
+        tags.append("pending_confirmation")
+    if row.get("Confirmation_Status") == "Accepted_Exception":
+        tags.append("accepted_exception")
+    if row.get("Dependency_Criticality") in {"P0", "P1"}:
+        tags.append("critical_dependency")
+    if row.get("Service_Priority") in {"P0", "P1"}:
+        tags.append("critical_service")
+    if row.get("Sensitivity", "").lower() in {"restricted", "high", "critical"}:
+        tags.append("sensitive_data")
+    return tags
+
+
+def _runtime_node_id(row: Row) -> str:
+    if not (row.get("Runtime_Type") or row.get("Runtime_ID")):
+        return ""
+    return row.get("Runtime_ID") or f"runtime:{safe_id(row.get('Service_ID', ''))}"
+
+
+def _explicit_dependency_target(row: Row) -> tuple[str, str] | None:
+    target_type = row.get("Target_Type", "").lower()
+    target = row.get("Target_ID", "")
+    if not target_type and not target:
+        return None
+    edge_type = _edge_type_for_target(target_type, row)
+    return edge_type, target
+
+
+def _legacy_dependency_targets(row: Row) -> list[tuple[str, str]]:
+    targets: list[tuple[str, str]] = []
+    if row.get("Target_Service_ID"):
+        targets.append(("calls", row["Target_Service_ID"]))
+    if row.get("Target_External_ID"):
+        targets.append(("calls_external", row["Target_External_ID"]))
+    if row.get("Target_Data_Asset_ID"):
+        edge_type = "writes_to" if _is_write(row) else "reads_from"
+        targets.append((edge_type, row["Target_Data_Asset_ID"]))
+    return targets
+
+
+def _edge_type_for_target(target_type: str, row: Row) -> str:
+    if target_type in {"service", "internal_service"}:
+        return "calls"
+    if target_type in {"external", "external_service"}:
+        return "calls_external"
+    if target_type in {"data_asset", "data", "storage", "database"}:
+        return "writes_to" if _is_write(row) else "reads_from"
+    if target_type in {"runtime", "kubernetes", "cloudrun", "cloud_run"}:
+        return "uses_runtime"
+    if target_type in {"firewall", "firewall_rule", "security_control"}:
+        return "allowed_by"
+    if target_type in {"monitoring", "monitoring_control"}:
+        return "monitored_by"
+    return "depends_on"
+
+
+def _is_write(row: Row) -> bool:
+    text = f"{row.get('Direction', '')} {row.get('Interaction_Mode', '')}".lower()
+    return any(token in text for token in ("write", "outbound_write", "produce", "publish"))

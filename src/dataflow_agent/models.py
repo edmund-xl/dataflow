@@ -72,6 +72,10 @@ class GraphNode:
     label: str
     sheet: str
     status: str = "Confirmed"
+    layer: str = ""
+    group: str = ""
+    parent_id: str = ""
+    c4_type: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
@@ -81,6 +85,10 @@ class GraphNode:
             "label": self.label,
             "sheet": self.sheet,
             "status": self.status,
+            "layer": self.layer,
+            "group": self.group,
+            "parent_id": self.parent_id,
+            "c4_type": self.c4_type,
             "metadata": self.metadata,
         }
 
@@ -110,20 +118,72 @@ class GraphEdge:
 
 
 @dataclass
+class DroppedEdge:
+    id: str
+    type: str
+    source: str
+    target: str
+    label: str = ""
+    status: str = "Confirmed"
+    evidence_id: str = ""
+    reason: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "type": self.type,
+            "source": self.source,
+            "target": self.target,
+            "label": self.label,
+            "status": self.status,
+            "evidence_id": self.evidence_id,
+            "reason": self.reason,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
 class GraphModel:
     nodes: dict[str, GraphNode] = field(default_factory=dict)
     edges: list[GraphEdge] = field(default_factory=list)
+    dropped_edges: list[DroppedEdge] = field(default_factory=list)
 
     def add_node(self, node: GraphNode) -> None:
         if node.id and node.id not in self.nodes:
             self.nodes[node.id] = node
 
-    def add_edge(self, edge: GraphEdge) -> None:
+    def add_edge(self, edge: GraphEdge) -> bool:
         if edge.source and edge.target and edge.source in self.nodes and edge.target in self.nodes:
             self.edges.append(edge)
+            return True
+        reason_parts: list[str] = []
+        if not edge.source:
+            reason_parts.append("missing source id")
+        elif edge.source not in self.nodes:
+            reason_parts.append(f"source node {edge.source} does not exist")
+        if not edge.target:
+            reason_parts.append("missing target id")
+        elif edge.target not in self.nodes:
+            reason_parts.append(f"target node {edge.target} does not exist")
+        self.dropped_edges.append(
+            DroppedEdge(
+                id=edge.id,
+                type=edge.type,
+                source=edge.source,
+                target=edge.target,
+                label=edge.label,
+                status=edge.status,
+                evidence_id=edge.evidence_id,
+                reason="; ".join(reason_parts) or "edge endpoint does not exist",
+                metadata=edge.metadata,
+            )
+        )
+        return False
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "nodes": [node.as_dict() for node in self.nodes.values()],
             "edges": [edge.as_dict() for edge in self.edges],
+            "dropped_edges": [edge.as_dict() for edge in self.dropped_edges],
         }

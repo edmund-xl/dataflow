@@ -76,9 +76,17 @@ scripts/merge_dcp.sh DCP_source_a DCP_source_b DCP_source_c
 scripts/build_service_drilldown.sh samples/DCP_v0.1 svc-rpc-api
 ```
 
+### 单服务端口查询
+
+需要快速查看单个服务的监听端口、上下游依赖、防火墙规则和监控覆盖时执行：
+
+```bash
+scripts/query_service_ports.sh samples/DCP_v0.1 svc-rpc-api
+```
+
 ## 五、工程接口
 
-脚本是日常使用入口。底层命令仍保留给开发和排错使用，包括 `check`、`quick-build`、`merge`、`validate`、`normalize`、`build`、`risk`、`render`、`report`、`package` 和 `run`。
+脚本是日常使用入口。底层命令仍保留给开发和排错使用，包括 `check`、`quick-build`、`merge`、`drilldown`、`query-port`、`validate`、`normalize`、`build`、`risk`、`render`、`report`、`package` 和 `run`。
 
 如需指定 Python 解释器，可使用环境变量：
 
@@ -215,9 +223,17 @@ To inspect one service's upstream and downstream relationships, runtime instance
 scripts/build_service_drilldown.sh samples/DCP_v0.1 svc-rpc-api
 ```
 
+### Single-Service Port Query
+
+To quickly inspect one service's listen ports, dependencies, firewall rules, and monitoring coverage, run:
+
+```bash
+scripts/query_service_ports.sh samples/DCP_v0.1 svc-rpc-api
+```
+
 ## 5. Engineering Interface
 
-Scripts are the daily operation interface. Lower-level commands remain available for development and troubleshooting, including `check`, `quick-build`, `merge`, `validate`, `normalize`, `build`, `risk`, `render`, `report`, `package`, and `run`.
+Scripts are the daily operation interface. Lower-level commands remain available for development and troubleshooting, including `check`, `quick-build`, `merge`, `drilldown`, `query-port`, `validate`, `normalize`, `build`, `risk`, `render`, `report`, `package`, and `run`.
 
 To use a specific Python interpreter, set the environment variable:
 

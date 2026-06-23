@@ -17,12 +17,17 @@ def write_graph_artifacts(graph: GraphModel, normalized_dir: Path) -> None:
     write_csv(
         normalized_dir / "nodes.csv",
         [_flatten(row) for row in nodes],
-        ["id", "type", "label", "sheet", "status", "metadata"],
+        ["id", "type", "label", "sheet", "status", "layer", "group", "parent_id", "c4_type", "metadata"],
     )
     write_csv(
         normalized_dir / "edges.csv",
         [_flatten(row) for row in edges],
         ["id", "type", "source", "target", "label", "status", "evidence_id", "metadata"],
+    )
+    write_csv(
+        normalized_dir / "dropped_edges.csv",
+        [_flatten(row) for row in [edge.as_dict() for edge in graph.dropped_edges]],
+        ["id", "type", "source", "target", "label", "status", "evidence_id", "reason", "metadata"],
     )
     graph_data = graph.as_dict()
     write_json(normalized_dir / "dataflow_graph.json", graph_data)

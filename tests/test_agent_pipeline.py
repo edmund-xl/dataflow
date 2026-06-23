@@ -17,6 +17,7 @@ from dataflow_agent.diagram_renderer import VIEWS, render_diagrams, render_servi
 from dataflow_agent.graph_builder import build_graph
 from dataflow_agent.normalizer import normalize_workbook
 from dataflow_agent.pipeline import run_all
+from dataflow_agent.port_index import build_service_port_index
 from dataflow_agent.risk_checker import check_risks
 from dataflow_agent.schema import load_schema
 from dataflow_agent.validator import validate_workbook
@@ -68,6 +69,28 @@ def test_sample_validates_and_builds_expected_edges() -> None:
     assert validation.findings == []
     edge_types = {edge.type for edge in graph.edges}
     assert {"runs_on", "calls", "calls_external", "reads_from", "uses_sa", "monitored_by"}.issubset(edge_types)
+
+
+def test_dropped_edges_and_edge_metadata_are_reported(tmp_path: Path) -> None:
+    schema = load_schema()
+    workbook = normalize_workbook(read_workbook(SAMPLE_WORKBOOK, schema), schema)
+    workbook.sheets["04_Services"][0]["Running_On_Instance_ID"] = "missing-instance"
+
+    graph = build_graph(workbook)
+    risks = check_risks(workbook, graph)
+
+    assert graph.dropped_edges
+    assert any(edge.target == "missing-instance" and "does not exist" in edge.reason for edge in graph.dropped_edges)
+    assert any(f.gate == "Gate 5" and "Dropped graph edge" in f.message for f in risks)
+    calls_edge = next(edge for edge in graph.edges if edge.type == "calls")
+    assert calls_edge.metadata["source_sheet"] == "05_Dependencies"
+    assert calls_edge.metadata["confirmation_status"] == "Confirmed"
+
+    from dataflow_agent.artifacts import write_graph_artifacts
+
+    write_graph_artifacts(graph, tmp_path)
+    dropped_csv = (tmp_path / "dropped_edges.csv").read_text(encoding="utf-8")
+    assert "missing-instance" in dropped_csv
 
 
 def test_duplicate_primary_key_is_validation_error() -> None:
@@ -180,8 +203,55 @@ def test_diagrams_show_non_final_statuses(tmp_path: Path) -> None:
     assert "PENDING" in overview_svg
     assert "EXC" in overview_svg
     assert "AUTO" in overview_svg
+    assert 'aria-label="' in overview_svg
+    assert 'data-risk-level="review"' in overview_svg
+    assert "<title>" in overview_svg
     assert "Pending_Confirmation" in overview_mmd
     assert "Accepted_Exception" in overview_mmd
+
+
+def test_k8s_service_with_data_asset_dependency_end_to_end(tmp_path: Path) -> None:
+    schema = load_schema()
+    workbook = read_workbook(SAMPLE_WORKBOOK, schema)
+    workbook.headers["04_Services"].extend(["Runtime_Type", "Runtime_ID", "Runtime_Name", "Runtime_Namespace", "Runtime_Cluster", "Runtime_Region"])
+    workbook.headers["05_Dependencies"].extend(["Target_Type", "Target_ID", "Interaction_Mode"])
+    service = next(row for row in workbook.sheets["04_Services"] if row["Service_ID"] == "svc-rpc-api")
+    service.update(
+        {
+            "Runtime_Type": "Kubernetes",
+            "Runtime_ID": "k8s-deploy-rpc",
+            "Runtime_Name": "rpc-api-deployment",
+            "Runtime_Namespace": "rpc",
+            "Runtime_Cluster": "cluster-main",
+            "Runtime_Region": "us-central1",
+        }
+    )
+    dep = next(row for row in workbook.sheets["05_Dependencies"] if row["Dependency_ID"] == "dep-rpc-sequencer")
+    dep.update(
+        {
+            "Target_Service_ID": "",
+            "Target_Data_Asset_ID": "",
+            "Target_Type": "data_asset",
+            "Target_ID": "data-cloudsql-state",
+            "Interaction_Mode": "write",
+            "Direction": "write",
+        }
+    )
+    normalized = normalize_workbook(workbook, schema)
+
+    validation = validate_workbook(normalized, schema)
+    graph = build_graph(normalized)
+    risks = check_risks(normalized, graph)
+    render_service_drilldown(graph, "svc-rpc-api", tmp_path)
+
+    assert not [f for f in validation.findings if f.severity in {"P0", "P1"}]
+    assert "k8s-deploy-rpc" in graph.nodes
+    runtime_edge = next(edge for edge in graph.edges if edge.type == "runs_on_runtime" and edge.source == "svc-rpc-api")
+    assert runtime_edge.metadata["runtime_context"]["cluster"] == "cluster-main"
+    assert any(edge.type == "writes_to" and edge.source == "svc-rpc-api" and edge.target == "data-cloudsql-state" for edge in graph.edges)
+    assert not [f for f in risks if f.gate == "Gate 5"]
+    drilldown_svg = (tmp_path / "service_drilldown_svc-rpc-api.svg").read_text(encoding="utf-8")
+    assert "rpc-api-deployment" in drilldown_svg
 
 
 def test_service_drilldown_renders_expected_artifacts(tmp_path: Path) -> None:
@@ -265,6 +335,44 @@ def test_merge_conflicts_block_final_package_unless_allowed(tmp_path: Path) -> N
     assert metadata["delivery_status"] == "Draft"
     assert metadata["merge_conflict_count"] > 0
     assert (draft_out / "dataflow_package_v0.1-demo" / "reports" / "merge_lineage.json").exists()
+    assert (draft_out / "dataflow_package_v0.1-demo" / "reports" / "conflict_diff.xlsx").exists()
+    draft_conflicts = (draft_out / "dataflow_package_v0.1-demo" / "reports" / "DRAFT_CONFLICTS.md").read_text(encoding="utf-8")
+    assert "first-kept" in draft_conflicts
+    assert "Service_Name" in draft_conflicts
+    assert "RPC API Conflict" in draft_conflicts
+
+
+def test_merge_conflict_count_decreases_after_source_fix(tmp_path: Path) -> None:
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    shutil.copy2(SAMPLE_WORKBOOK, first / SAMPLE_WORKBOOK.name)
+    second_workbook = second / SAMPLE_WORKBOOK.name
+    shutil.copy2(SAMPLE_WORKBOOK, second_workbook)
+    wb = load_workbook(second_workbook)
+    ws = wb["04_Services"]
+    header_row = next(row for row in range(1, ws.max_row + 1) if any(cell.value == "Service_ID" for cell in ws[row]))
+    headers = [cell.value for cell in ws[header_row]]
+    service_id_col = headers.index("Service_ID") + 1
+    service_name_col = headers.index("Service_Name") + 1
+    target_row = None
+    for row in range(header_row + 1, ws.max_row + 1):
+        if ws.cell(row, service_id_col).value == "svc-rpc-api":
+            target_row = row
+            ws.cell(row, service_name_col).value = "RPC API Conflict"
+            break
+    assert target_row is not None
+    wb.save(second_workbook)
+
+    conflicted = merge_dcps([first, second], tmp_path / "conflicted", "v0.1-demo")
+    assert conflicted.conflict_count > 0
+    assert conflicted.conflict_diffs
+
+    ws.cell(target_row, service_name_col).value = "RPC API"
+    wb.save(second_workbook)
+    resolved = merge_dcps([first, second], tmp_path / "resolved", "v0.1-demo")
+    assert resolved.conflict_count < conflicted.conflict_count
 
 
 def test_script_check_dcp_runs_with_defaults() -> None:
@@ -301,12 +409,27 @@ def test_script_service_drilldown_runs_with_defaults() -> None:
     assert (output_dir / "service_drilldown_svc-rpc-api.mmd").exists()
 
 
+def test_service_port_query_runs_with_defaults() -> None:
+    schema = load_schema()
+    workbook = normalize_workbook(read_workbook(SAMPLE_WORKBOOK, schema), schema)
+    index = build_service_port_index(workbook, "svc-rpc-api")
+    assert "8545" in index["listen_ports"]
+    assert index["outbound_dependencies"]
+
+    subprocess.run(["scripts/query_service_ports.sh", "samples/DCP_v0.1", "svc-rpc-api"], cwd=ROOT, check=True, env=_script_env())
+    output_file = SAMPLE_DCP / "dist" / "service_ports_svc-rpc-api.json"
+    assert output_file.exists()
+    output = json.loads(output_file.read_text(encoding="utf-8"))
+    assert output["service_id"] == "svc-rpc-api"
+
+
 def test_scripts_do_not_embed_personal_python_paths() -> None:
     for path in [
         ROOT / "scripts" / "check_dcp.sh",
         ROOT / "scripts" / "build_dataflow_package.sh",
         ROOT / "scripts" / "merge_dcp.sh",
         ROOT / "scripts" / "build_service_drilldown.sh",
+        ROOT / "scripts" / "query_service_ports.sh",
     ]:
         text = path.read_text(encoding="utf-8")
         assert "DATAFLOW_PYTHON" in text
@@ -368,6 +491,7 @@ def test_github_actions_ci_covers_core_flow() -> None:
     assert "dataflow-agent quick-build samples/DCP_v0.1" in workflow
     assert "dataflow-agent merge samples/DCP_v0.1 samples/DCP_v0.1" in workflow
     assert "dataflow-agent drilldown --input samples/DCP_v0.1 --service-id svc-rpc-api" in workflow
+    assert "dataflow-agent query-port --input samples/DCP_v0.1 --service-id svc-rpc-api" in workflow
     assert "actions/upload-artifact@v4" in workflow
 
 

@@ -5,8 +5,10 @@ import shutil
 import sys
 from pathlib import Path
 
+from .constants import find_workbook
 from .defaults import default_build_output, default_check_output, default_merge_output, infer_env_version
 from .merge import merge_dcps
+from .normalizer import normalize_workbook
 from .pipeline import (
     load_state,
     run_all,
@@ -20,6 +22,9 @@ from .pipeline import (
     run_service_drilldown,
     run_validate,
 )
+from .port_index import write_service_port_index
+from .schema import load_schema
+from .xlsx_reader import read_workbook
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -51,6 +56,13 @@ def main(argv: list[str] | None = None) -> int:
     drilldown_parser.add_argument("--env", help="Environment name; defaults to 00_Metadata.Environment")
     drilldown_parser.add_argument("--version", help="Package version; defaults to 00_Metadata.Version")
     drilldown_parser.add_argument("--output", help="Output directory; defaults to <DCP>/dist/service_drilldown_<Service_ID>")
+
+    port_parser = subparsers.add_parser("query-port", help="Query ports, dependencies, firewall, and monitoring for one service")
+    port_parser.add_argument("--input", required=True, help="DCP directory or workbook path")
+    port_parser.add_argument("--service-id", required=True, help="Service_ID to query")
+    port_parser.add_argument("--env", help="Environment name; defaults to 00_Metadata.Environment")
+    port_parser.add_argument("--version", help="Package version; defaults to 00_Metadata.Version")
+    port_parser.add_argument("--output", help="Output JSON file; defaults to <DCP>/dist/service_ports_<Service_ID>.json")
 
     for command in ["validate", "normalize", "build", "risk", "render", "report", "package", "run"]:
         _add_common(subparsers.add_parser(command))
@@ -94,11 +106,10 @@ def main(argv: list[str] | None = None) -> int:
         shutil.copy2(merge_result.merged_dcp / "merge_report.json", state.paths.reports_dir / "merge_report.json")
         shutil.copy2(merge_result.merged_dcp / "merge_report.xlsx", state.paths.reports_dir / "merge_report.xlsx")
         shutil.copy2(merge_result.merged_dcp / "merge_lineage.json", state.paths.reports_dir / "merge_lineage.json")
+        shutil.copy2(merge_result.merged_dcp / "conflict_diff.json", state.paths.reports_dir / "conflict_diff.json")
+        shutil.copy2(merge_result.merged_dcp / "conflict_diff.xlsx", state.paths.reports_dir / "conflict_diff.xlsx")
         if merge_result.conflict_count:
-            (state.paths.reports_dir / "DRAFT_CONFLICTS.md").write_text(
-                "# Draft Package\n\nThis package was generated with unresolved merge conflicts and must not be used for final acceptance.\n",
-                encoding="utf-8",
-            )
+            shutil.copy2(merge_result.merged_dcp / "DRAFT_CONFLICTS.md", state.paths.reports_dir / "DRAFT_CONFLICTS.md")
         run_package(state, env, version)
         _print_summary(state)
         print(f"Merged DCP: {merge_result.merged_dcp}")
@@ -119,6 +130,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Service drilldown: {args.service_id}")
         for output in outputs:
             print(f"Drilldown artifact: {output}")
+        return 0
+
+    if args.command == "query-port":
+        input_dir = Path(args.input).resolve()
+        output_path = Path(args.output).resolve() if args.output else default_build_output(input_dir) / f"service_ports_{args.service_id}.json"
+        schema = load_schema()
+        workbook = normalize_workbook(read_workbook(find_workbook(input_dir), schema), schema)
+        index = write_service_port_index(workbook, args.service_id, output_path)
+        print(f"Service port index: {output_path}")
+        print(f"Listen ports: {', '.join(index['listen_ports']) if index['listen_ports'] else 'N/A'}")
+        print(f"Inbound dependencies: {len(index['inbound_dependencies'])}")
+        print(f"Outbound dependencies: {len(index['outbound_dependencies'])}")
+        print(f"Firewall rules: {len(index['firewall_rules'])}")
+        print(f"Monitoring rows: {len(index['monitoring'])}")
         return 0
 
     input_dir = Path(args.input).resolve()

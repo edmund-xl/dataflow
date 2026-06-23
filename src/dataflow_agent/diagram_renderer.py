@@ -29,13 +29,13 @@ class NodeStyle:
 
 
 VIEWS = [
-    View("00_overview", "Dataflow Project Data Flow Overview", {"gcp_project", "lb", "entry_point", "service", "server", "data_asset", "external_service", "firewall_rule", "cloud_armor_policy", "monitoring_control"}, {"contains", "runs_on", "calls", "calls_external", "reads_from", "writes_to", "allowed_by", "protected_by", "monitored_by"}),
+    View("00_overview", "Dataflow Project Data Flow Overview", {"gcp_project", "lb", "entry_point", "service", "server", "runtime", "data_asset", "external_service", "firewall_rule", "cloud_armor_policy", "monitoring_control"}, {"contains", "runs_on", "runs_on_runtime", "uses_runtime", "calls", "calls_external", "reads_from", "writes_to", "depends_on", "allowed_by", "protected_by", "monitored_by"}),
     View("01_network_layer", "Network Layer", {"gcp_project", "network", "vpc", "subnet", "nat", "lb", "psc_peering", "firewall_rule", "cloud_armor_policy", "entry_point"}, {"contains", "allowed_by", "protected_by"}),
-    View("02_compute_service_layer", "Compute And Service Layer", {"server", "service", "port"}, {"runs_on", "listens_on"}),
-    View("03_service_dependency_layer", "Service Dependency Layer", {"service", "external_service", "data_asset", "dependency_ref", "firewall_rule"}, {"calls", "calls_external", "reads_from", "writes_to", "allowed_by"}),
+    View("02_compute_service_layer", "Compute And Service Layer", {"server", "runtime", "service", "port"}, {"runs_on", "runs_on_runtime", "uses_runtime", "listens_on"}),
+    View("03_service_dependency_layer", "Service Dependency Layer", {"service", "runtime", "external_service", "data_asset", "dependency_ref", "firewall_rule"}, {"calls", "calls_external", "reads_from", "writes_to", "depends_on", "uses_runtime", "allowed_by"}),
     View("04_data_storage_layer", "Data And Storage Layer", {"service", "data_asset"}, {"reads_from", "writes_to"}),
     View("05_security_monitoring_layer", "Security And Monitoring Layer", {"service", "server", "firewall_rule", "cloud_armor_policy", "service_account", "iam_binding", "monitoring_control", "entry_point"}, {"allowed_by", "protected_by", "uses_sa", "has_binding", "monitored_by"}),
-    View("06_cicd_delivery_layer", "CI/CD Delivery Layer", {"cicd_component", "service", "server"}, {"deployed_by", "runs_on"}),
+    View("06_cicd_delivery_layer", "CI/CD Delivery Layer", {"cicd_component", "service", "server", "runtime"}, {"deployed_by", "runs_on", "runs_on_runtime"}),
 ]
 
 NODE_WIDTH = 236
@@ -60,6 +60,7 @@ TYPE_ORDER = {
     "entry_point": 1,
     "cicd_component": 1,
     "server": 2,
+    "runtime": 2,
     "service": 3,
     "port": 4,
     "dependency_ref": 4,
@@ -82,6 +83,7 @@ TYPE_STYLES = {
     "psc_peering": NodeStyle("#E0F2FE", "#7DD3FC", "#0284C7", "Network"),
     "entry_point": NodeStyle("#F1F5F9", "#CBD5E1", "#475569", "Entry"),
     "server": NodeStyle("#FEF3C7", "#FBBF24", "#D97706", "Runtime"),
+    "runtime": NodeStyle("#FEF3C7", "#FBBF24", "#D97706", "Runtime"),
     "service": NodeStyle("#DBEAFE", "#60A5FA", "#2563EB", "Service"),
     "port": NodeStyle("#EDE9FE", "#A78BFA", "#7C3AED", "Interface"),
     "dependency_ref": NodeStyle("#EDE9FE", "#A78BFA", "#7C3AED", "Interface"),
@@ -96,6 +98,21 @@ TYPE_STYLES = {
 }
 
 CONTROL_EDGES = {"allowed_by", "protected_by", "uses_sa", "has_binding", "monitored_by", "deployed_by"}
+LAYER_ORDER = {
+    "project": 0,
+    "network": 1,
+    "edge": 1,
+    "delivery": 1,
+    "runtime": 2,
+    "service": 3,
+    "interface": 4,
+    "data": 5,
+    "external": 5,
+    "identity": 6,
+    "security": 6,
+    "monitoring": 7,
+    "other": 8,
+}
 DETAIL_KEYS = (
     "environment",
     "role",
@@ -175,13 +192,13 @@ def _denoise_overview(nodes: list[GraphNode], edges: list[GraphEdge]) -> tuple[l
             target = node_by_id.get(edge.target)
             if not source or not target:
                 continue
-            if edge.type == "runs_on" and edge.source in keep and edge.target not in keep:
+            if edge.type in {"runs_on", "runs_on_runtime"} and edge.source in keep and edge.target not in keep:
                 keep.add(edge.target)
                 changed = True
-            if edge.type in {"calls", "calls_external", "reads_from", "writes_to"} and (edge.source in keep or edge.target in keep):
+            if edge.type in {"calls", "calls_external", "reads_from", "writes_to", "depends_on", "uses_runtime"} and (edge.source in keep or edge.target in keep):
                 if source.type == "service" and source.metadata.get("priority", "") in {"P0", "P1"}:
                     keep.add(edge.source)
-                if target.type in {"service", "data_asset", "external_service"}:
+                if target.type in {"service", "runtime", "data_asset", "external_service"}:
                     keep.add(edge.target)
             if edge.type in {"allowed_by", "protected_by", "monitored_by"} and edge.source in keep:
                 keep.add(edge.target)
@@ -202,7 +219,7 @@ def _select_service_drilldown(graph: GraphModel, service_id: str) -> tuple[list[
     while changed:
         changed = False
         for edge in graph.edges:
-            if edge.type in {"has_binding", "allowed_by", "monitored_by"} and (edge.source in node_ids or edge.target in node_ids):
+            if edge.type in {"has_binding", "allowed_by", "monitored_by", "runs_on_runtime", "uses_runtime"} and (edge.source in node_ids or edge.target in node_ids):
                 before = len(node_ids)
                 selected_edges.append(edge)
                 node_ids.update({edge.source, edge.target})
@@ -219,8 +236,8 @@ def _select_service_drilldown(graph: GraphModel, service_id: str) -> tuple[list[
 
 def _layout(nodes: list[GraphNode]) -> dict[str, tuple[int, int]]:
     columns: dict[int, list[GraphNode]] = {}
-    for node in sorted(nodes, key=lambda item: (TYPE_ORDER.get(item.type, 9), item.label.lower(), item.id)):
-        columns.setdefault(TYPE_ORDER.get(node.type, 9), []).append(node)
+    for node in sorted(nodes, key=lambda item: (_node_order(item), item.group.lower(), item.label.lower(), item.id)):
+        columns.setdefault(_node_order(node), []).append(node)
 
     positions: dict[str, tuple[int, int]] = {}
     x_step = NODE_WIDTH + COLUMN_GAP
@@ -229,6 +246,12 @@ def _layout(nodes: list[GraphNode]) -> dict[str, tuple[int, int]]:
         for row_idx, node in enumerate(columns[col]):
             positions[node.id] = (LEFT_MARGIN + col_idx * x_step, HEADER_HEIGHT + 32 + row_idx * y_step)
     return positions
+
+
+def _node_order(node: GraphNode) -> int:
+    if node.layer:
+        return LAYER_ORDER.get(node.layer, TYPE_ORDER.get(node.type, 9))
+    return TYPE_ORDER.get(node.type, 9)
 
 
 def _size(positions: dict[str, tuple[int, int]]) -> tuple[int, int]:
@@ -270,6 +293,10 @@ def _write_svg(path: Path, view: View, nodes: list[GraphNode], edges: list[Graph
         path_data = _svg_path(points)
         dash = ' stroke-dasharray="8 7"' if dashed else ""
         width_attr = "1.8" if dashed else "2.2"
+        edge_title = _edge_accessible_label(edge)
+        risk_level = _edge_risk_level(edge)
+        lines.append(f'<g role="img" aria-label="{xml_escape(edge_title)}" data-risk-level="{risk_level}">')
+        lines.append(f'<title>{xml_escape(edge_title)}</title>')
         lines.append(f'<path d="{path_data}" fill="none" stroke="{edge_color}" stroke-width="{width_attr}" marker-end="url(#arrow)" opacity="{palette["edge_opacity"]}"{dash}/>')
         label = _edge_label(edge)
         if label:
@@ -277,6 +304,7 @@ def _write_svg(path: Path, view: View, nodes: list[GraphNode], edges: list[Graph
             label_width = max(54, min(190, len(label) * 6 + 22))
             lines.append(f'<rect x="{lx - label_width / 2:.1f}" y="{ly - 12:.1f}" width="{label_width}" height="20" rx="10" fill="{palette["edge_label_bg"]}" stroke="{palette["border"]}" stroke-width="0.6"/>')
             lines.append(f'<text x="{lx:.1f}" y="{ly + 3:.1f}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="600" fill="{palette["edge_label_text"]}">{xml_escape(label)}</text>')
+        lines.append("</g>")
 
     for node in nodes:
         x, y = positions.get(node.id, (LEFT_MARGIN, HEADER_HEIGHT + 32))
@@ -422,7 +450,10 @@ def _append_svg_node(lines: list[str], node: GraphNode, x: int, y: int, dark: bo
     text_color = palette["text"]
     subtext = palette["muted"]
     dash = ' stroke-dasharray="6 4"' if status in {"auto", "pending"} else ""
-    lines.append(f'<g filter="url(#cardShadow)">')
+    node_title = _node_accessible_label(node)
+    risk_level = _node_risk_level(node)
+    lines.append(f'<g filter="url(#cardShadow)" role="img" aria-label="{xml_escape(node_title)}" data-risk-level="{risk_level}">')
+    lines.append(f'<title>{xml_escape(node_title)}</title>')
     lines.append(f'<rect x="{x}" y="{y}" width="{NODE_WIDTH}" height="{NODE_HEIGHT}" rx="12" fill="{style.fill}" stroke="{style.stroke}" stroke-width="1.3"{dash}/>')
     lines.append(f'<rect x="{x}" y="{y}" width="8" height="{NODE_HEIGHT}" rx="4" fill="{style.accent}"/>')
     type_label = _display_type(node.type)
@@ -748,6 +779,39 @@ def _edge_color(edge: GraphEdge, dark: bool, palette: dict[str, str]) -> str:
     if status == "exception":
         return "#C084FC" if dark else "#9333EA"
     return palette["edge"]
+
+
+def _edge_accessible_label(edge: GraphEdge) -> str:
+    risk = _edge_risk_level(edge)
+    return f"{edge.type} edge from {edge.source or 'N/A'} to {edge.target or 'N/A'}; status {edge.status}; risk {risk}"
+
+
+def _node_accessible_label(node: GraphNode) -> str:
+    risk = _node_risk_level(node)
+    return f"{node.label} node; type {node.type}; status {node.status}; layer {node.layer or 'unknown'}; risk {risk}"
+
+
+def _edge_risk_level(edge: GraphEdge) -> str:
+    status = _status_kind(edge.status)
+    if status == "pending":
+        return "review"
+    if status == "exception":
+        return "exception"
+    tags = edge.metadata.get("risk_tags", []) if isinstance(edge.metadata, dict) else []
+    if any(tag in tags for tag in ("critical_dependency", "sensitive_data")):
+        return "elevated"
+    return "normal"
+
+
+def _node_risk_level(node: GraphNode) -> str:
+    status = _status_kind(node.status)
+    if status == "pending":
+        return "review"
+    if status == "exception":
+        return "exception"
+    if node.metadata.get("priority") in {"P0", "P1"} or str(node.metadata.get("sensitivity", "")).lower() in {"restricted", "high", "critical"}:
+        return "elevated"
+    return "normal"
 
 
 def _edge_label(edge: GraphEdge) -> str:

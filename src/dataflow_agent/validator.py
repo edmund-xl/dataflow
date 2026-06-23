@@ -4,7 +4,7 @@ import ipaddress
 from typing import Iterable
 
 from .models import Finding, ValidationResult, WorkbookData
-from .util import split_multi
+from .util import safe_id, split_multi
 
 
 def validate_workbook(workbook: WorkbookData, schema: dict) -> ValidationResult:
@@ -196,8 +196,37 @@ def _validate_foreign_keys(workbook: WorkbookData, schema: dict, result: Validat
 
 
 def _validate_dependency_targets(workbook: WorkbookData, result: ValidationResult) -> None:
+    indexes = _dependency_target_indexes(workbook)
     for row in workbook.sheets.get("05_Dependencies", []):
         if _inactive(row):
+            continue
+        row_id = row.get("Record_ID") or row.get("Dependency_ID", "")
+        target_type = row.get("Target_Type", "")
+        target_id = row.get("Target_ID", "")
+        if target_type or target_id:
+            if not target_type:
+                result.add(Finding("Gate 2", "P1", "05_Dependencies", row_id, "Target_Type", "Target_ID is populated but Target_Type is blank.", "Fill Target_Type so the dependency can be resolved deterministically."))
+                continue
+            if not target_id:
+                result.add(Finding("Gate 2", "P1", "05_Dependencies", row_id, "Target_ID", "Target_Type is populated but Target_ID is blank.", "Fill Target_ID or remove Target_Type."))
+                continue
+            normalized_type = _normalize_target_type(target_type)
+            if normalized_type not in indexes:
+                result.add(Finding("Gate 2", "P1", "05_Dependencies", row_id, "Target_Type", f"Unsupported dependency Target_Type={target_type}.", "Use an approved Target_Type value or update the schema."))
+                continue
+            if target_id not in indexes[normalized_type]:
+                result.add(
+                    Finding(
+                        "Gate 2",
+                        "P1",
+                        "05_Dependencies",
+                        row_id,
+                        "Target_ID",
+                        f"Target_ID={target_id} does not exist for Target_Type={target_type}.",
+                        "Correct Target_ID, Target_Type, or add the missing target row.",
+                    )
+                )
+            _validate_interaction_mode(row, row_id, normalized_type, result)
             continue
         targets = [row.get("Target_Service_ID", ""), row.get("Target_External_ID", ""), row.get("Target_Data_Asset_ID", "")]
         if not any(targets):
@@ -206,12 +235,86 @@ def _validate_dependency_targets(workbook: WorkbookData, result: ValidationResul
                     "Gate 2",
                     "P0",
                     "05_Dependencies",
-                    row.get("Record_ID") or row.get("Dependency_ID", ""),
+                    row_id,
                     "Target_*",
                     "Dependency has no target service, external service, or data asset.",
                     "Populate exactly the target field that represents this dependency.",
                 )
             )
+        _validate_interaction_mode(row, row_id, _legacy_target_type(row), result)
+
+
+def _dependency_target_indexes(workbook: WorkbookData) -> dict[str, set[str]]:
+    runtime_ids = {
+        row.get("Runtime_ID") or f"runtime:{safe_id(row.get('Service_ID', ''))}"
+        for row in workbook.sheets.get("04_Services", [])
+        if not _inactive(row) and (row.get("Runtime_Type") or row.get("Runtime_ID")) and row.get("Service_ID")
+    }
+    return {
+        "service": {row.get("Service_ID", "") for row in workbook.sheets.get("04_Services", []) if row.get("Service_ID") and not _inactive(row)},
+        "external_service": {row.get("External_ID", "") for row in workbook.sheets.get("12_External_Services", []) if row.get("External_ID") and not _inactive(row)},
+        "data_asset": {row.get("Data_Asset_ID", "") for row in workbook.sheets.get("06_Data_Assets", []) if row.get("Data_Asset_ID") and not _inactive(row)},
+        "runtime": {value for value in runtime_ids if value},
+        "firewall_rule": {row.get("Firewall_ID", "") for row in workbook.sheets.get("07_Firewalls", []) if row.get("Firewall_ID") and not _inactive(row)},
+        "monitoring_control": {row.get("Monitoring_ID", "") for row in workbook.sheets.get("10_Monitoring", []) if row.get("Monitoring_ID") and not _inactive(row)},
+    }
+
+
+def _normalize_target_type(value: str) -> str:
+    lowered = value.lower()
+    if lowered in {"service", "internal_service"}:
+        return "service"
+    if lowered in {"external", "external_service"}:
+        return "external_service"
+    if lowered in {"data_asset", "data", "storage", "database"}:
+        return "data_asset"
+    if lowered in {"runtime", "kubernetes", "cloudrun", "cloud_run"}:
+        return "runtime"
+    if lowered in {"firewall", "firewall_rule", "security_control"}:
+        return "firewall_rule"
+    if lowered in {"monitoring", "monitoring_control"}:
+        return "monitoring_control"
+    return lowered
+
+
+def _legacy_target_type(row: dict[str, str]) -> str:
+    if row.get("Target_Data_Asset_ID"):
+        return "data_asset"
+    if row.get("Target_External_ID"):
+        return "external_service"
+    if row.get("Target_Service_ID"):
+        return "service"
+    return ""
+
+
+def _validate_interaction_mode(row: dict[str, str], row_id: str, target_type: str, result: ValidationResult) -> None:
+    mode = row.get("Interaction_Mode", "").lower()
+    if not mode:
+        return
+    if mode in {"read", "write", "produce", "publish"} and target_type not in {"data_asset", "external_service"}:
+        result.add(
+            Finding(
+                "Gate 2",
+                "P2",
+                "05_Dependencies",
+                row_id,
+                "Interaction_Mode",
+                f"Interaction_Mode={row.get('Interaction_Mode')} usually targets data_asset or external_service, but target type is {target_type}.",
+                "Confirm the interaction mode and target type.",
+            )
+        )
+    if mode in {"sync", "async", "stream"} and target_type == "data_asset":
+        result.add(
+            Finding(
+                "Gate 2",
+                "P2",
+                "05_Dependencies",
+                row_id,
+                "Interaction_Mode",
+                f"Interaction_Mode={row.get('Interaction_Mode')} on a data_asset target may be ambiguous.",
+                "Use read/write/batch where possible or document the reason.",
+            )
+        )
 
 
 def _validate_monitoring_targets(workbook: WorkbookData, result: ValidationResult) -> None:

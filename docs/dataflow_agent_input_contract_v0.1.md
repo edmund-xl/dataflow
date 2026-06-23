@@ -109,7 +109,9 @@ DCP_v0.1/
 | 09_IAM_SA.Used_By_Service_ID | 04_Services.Service_ID | 填写时使用方服务必须存在。 |
 | 14_Evidence_Index.Evidence_ID | 其他证据字段 | 被引用证据必须存在且唯一。 |
 
-每条服务依赖至少应填写一个目标字段：目标服务、目标外部服务或目标数据资产。
+每条服务依赖至少应填写一个目标字段：目标服务、目标外部服务或目标数据资产。新模板可以选择填写 `Target_Type`、`Target_ID` 和 `Interaction_Mode`；这些字段存在时优先用于目标解析，缺失时继续使用旧目标字段。
+
+可选增强字段不破坏旧模板：`04_Services` 可增加 `Runtime_Type`、`Runtime_ID`、`Runtime_Name`、`Runtime_Namespace`、`Runtime_Cluster`、`Runtime_Region`，用于 Kubernetes、CloudRun、VM 或托管服务建模；`05_Dependencies` 可增加 `Target_Type`、`Target_ID`、`Interaction_Mode`，用于明确服务、外部服务、数据资产、运行时或安全控制目标。
 
 ## 七、节点生成规则
 
@@ -133,10 +135,12 @@ DCP_v0.1/
 |---|---|---|---|
 | 包含 | 项目 | 网络、服务器、数据资产 | 项目和网络归属字段 |
 | 运行于 | 服务 | 服务器 | 服务运行实例字段 |
+| 运行于运行时 | 服务 | 运行时 | Runtime_Type / Runtime_ID 可选字段 |
 | 监听端口 | 服务 | 端口 | 服务监听端口字段 |
 | 调用 | 源服务 | 目标服务 | 服务依赖目标服务字段 |
 | 读写 | 服务 | 数据资产 | 服务依赖目标数据资产字段 |
 | 调用外部 | 服务 | 外部服务 | 服务依赖目标外部服务字段 |
+| 依赖 | 源服务 | 显式目标 | Target_Type / Target_ID 可选字段 |
 | 被允许 | 服务或依赖 | 防火墙规则 | 防火墙关联字段 |
 | 被保护 | 入口或服务 | 外部入口防护策略 | 入口保护字段 |
 | 使用账号 | 服务 | 服务账号 | 权限使用方字段 |
@@ -162,6 +166,7 @@ dataflow_package_v0.1/
   normalized/
     nodes.csv
     edges.csv
+    dropped_edges.csv
     dataflow_graph.json
     dataflow_graph.yaml
   diagrams/
@@ -181,7 +186,7 @@ dataflow_package_v0.1/
   metadata.json
 ```
 
-每个 `diagrams/` 图层均以同一文件名同时输出 SVG、PNG、PDF 和 Mermaid 调试文件。常规图层使用内置 C4 架构图风格，安全与监控图层使用深色审计风格；所有图形均由工作簿数据重新生成，不依赖外部图形命令。
+每个 `diagrams/` 图层均以同一文件名同时输出 SVG、PNG、PDF 和 Mermaid 调试文件。常规图层使用内置 C4 架构图风格，安全与监控图层使用深色审计风格；SVG 风险标记包含可访问和机器可读属性。所有图形均由工作簿数据重新生成，不依赖外部图形命令。
 
 ## 十一、开源授权
 
@@ -308,7 +313,9 @@ The agent requires the following sheet names to remain stable:
 | 09_IAM_SA.Used_By_Service_ID | 04_Services.Service_ID | A consuming service must exist when populated. |
 | 14_Evidence_Index.Evidence_ID | Evidence reference fields | Referenced evidence must exist and be unique. |
 
-Each service dependency should populate at least one target field: target service, target external service, or target data asset.
+Each service dependency should populate at least one target field: target service, target external service, or target data asset. New templates may populate `Target_Type`, `Target_ID`, and `Interaction_Mode`; when present, these fields take precedence for target resolution, while old target fields remain supported.
+
+Optional enhancement fields do not break old templates: `04_Services` may add `Runtime_Type`, `Runtime_ID`, `Runtime_Name`, `Runtime_Namespace`, `Runtime_Cluster`, and `Runtime_Region` for Kubernetes, CloudRun, VM, or managed-service modeling; `05_Dependencies` may add `Target_Type`, `Target_ID`, and `Interaction_Mode` to identify service, external service, data asset, runtime, or security-control targets.
 
 ## 7. Node-Generation Rules
 
@@ -332,10 +339,12 @@ Each service dependency should populate at least one target field: target servic
 |---|---|---|---|
 | Contains | Project | Network, server, data asset | Project and network ownership fields |
 | Runs on | Service | Server | Service runtime instance field |
+| Runs on runtime | Service | Runtime | Optional Runtime_Type / Runtime_ID fields |
 | Listens on | Service | Port | Service listening-port field |
 | Calls | Source service | Target service | Dependency target-service field |
 | Reads or writes | Service | Data asset | Dependency target-data-asset field |
 | Calls external | Service | External service | Dependency target-external-service field |
+| Depends on | Source service | Explicit target | Optional Target_Type / Target_ID fields |
 | Allowed by | Service or dependency | Firewall rule | Firewall relation fields |
 | Protected by | Entry or service | External entry protection policy | Entry protection fields |
 | Uses account | Service | Service account | Permission consumer field |
@@ -361,6 +370,7 @@ dataflow_package_v0.1/
   normalized/
     nodes.csv
     edges.csv
+    dropped_edges.csv
     dataflow_graph.json
     dataflow_graph.yaml
   diagrams/
@@ -380,7 +390,7 @@ dataflow_package_v0.1/
   metadata.json
 ```
 
-Each `diagrams/` layer is emitted with the same base name as SVG, PNG, PDF, and Mermaid debug files. Regular layers use the built-in C4 architecture style, and the security and monitoring layer uses a dark audit style; all diagrams are regenerated from workbook data and do not depend on external graph commands.
+Each `diagrams/` layer is emitted with the same base name as SVG, PNG, PDF, and Mermaid debug files. Regular layers use the built-in C4 architecture style, and the security and monitoring layer uses a dark audit style; SVG risk markers include accessible and machine-readable attributes. All diagrams are regenerated from workbook data and do not depend on external graph commands.
 
 ## 11. Open-Source License
 

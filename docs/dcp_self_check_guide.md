@@ -30,6 +30,7 @@ path/to/DCP_v0.1/agent_check/
 
 - `PASS`：没有阻断级校验问题。
 - `NEEDS_FIX`：需要按 `fix_list.md` 修改源工作簿。
+- `丢弃关系数量`：表示引用目标不存在或不完整导致未进入正式图的关系数量。
 
 ## 三、处理规则
 
@@ -69,6 +70,7 @@ Read `check_summary.md` first:
 
 - `PASS`: no blocking validation issue.
 - `NEEDS_FIX`: correct the source workbook according to `fix_list.md`.
+- `Dropped graph edges`: relationships that could not enter the formal graph because referenced endpoints are missing or incomplete.
 
 ## 3. Handling Rule
 

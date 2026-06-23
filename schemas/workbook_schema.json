@@ -40,11 +40,13 @@
     },
     "04_Services": {
       "fields": ["Record_ID", "Service_ID", "Service_Name", "Service_Priority", "Running_On_Instance_ID", "Process_Name", "Protocol", "Listen_Ports", "Config_File_Path", "Service_Owner", "Service_Role", "Environment", "Source_Type", "Evidence_ID", "Confirmation_Status", "Collected_By", "Collected_At", "Notes"],
+      "optional_fields": ["Runtime_Type", "Runtime_ID", "Runtime_Name", "Runtime_Namespace", "Runtime_Cluster", "Runtime_Region"],
       "primary_key": "Service_ID",
       "required_fields": ["Record_ID", "Service_ID", "Service_Name", "Service_Priority", "Running_On_Instance_ID", "Environment", "Evidence_ID", "Confirmation_Status"]
     },
     "05_Dependencies": {
       "fields": ["Record_ID", "Dependency_ID", "Source_Service_ID", "Target_Service_ID", "Target_External_ID", "Target_Data_Asset_ID", "Target_Port", "Target_Port_Protocol", "Target_Path", "Auth_Method", "Direction", "Call_Description", "Dependency_Criticality", "Environment", "Source_Type", "Evidence_ID", "Confirmation_Status", "Collected_By", "Collected_At", "Notes"],
+      "optional_fields": ["Target_Type", "Target_ID", "Interaction_Mode"],
       "primary_key": "Dependency_ID",
       "required_fields": ["Record_ID", "Dependency_ID", "Source_Service_ID", "Target_Port", "Target_Port_Protocol", "Direction", "Dependency_Criticality", "Environment", "Evidence_ID", "Confirmation_Status"]
     },
@@ -119,7 +121,7 @@
     ["12_External_Services", "Used_By_Service_ID", "04_Services", "Service_ID", "optional"]
   ],
   "enum_fields": {
-    "Environment": ["Mainnet", "Prod", "Production", "Testnetv2", "Devnet", "Staging"],
+    "Environment": ["Mainnet", "Prod", "Production", "Testnet", "Testnetv1", "Testnetv2", "Testnetv3", "Devnet", "Development", "Staging", "Preprod", "UAT", "QA", "Sandbox", "Local", "Demo"],
     "Confirmation_Status": ["Confirmed", "Auto_Detected", "Pending_Confirmation", "Accepted_Exception", "Rejected", "Not_Applicable"],
     "Included_In_Scope": ["Yes", "No"],
     "Is_High_Privilege": ["Yes", "No"],
@@ -131,6 +133,9 @@
     "Severity": ["P0", "P1", "P2", "P3", "Info"],
     "Status": ["Open", "Pending_Confirmation", "Confirmed_Issue", "Accepted_Exception", "False_Positive", "Resolved"],
     "Protocol": ["TCP", "UDP", "HTTP", "HTTPS", "HTTP/HTTPS", "HTTP/JSON", "GRPC", "Private-IP", "Other"],
-    "Target_Port_Protocol": ["TCP", "UDP", "HTTP", "HTTPS", "HTTP/HTTPS", "HTTP/JSON", "GRPC", "Private-IP", "Other"]
+    "Target_Port_Protocol": ["TCP", "UDP", "HTTP", "HTTPS", "HTTP/HTTPS", "HTTP/JSON", "GRPC", "Private-IP", "Other"],
+    "Runtime_Type": ["VM", "Kubernetes", "CloudRun", "Cloud_Run", "Managed_Service", "Bare_Metal", "Other"],
+    "Target_Type": ["service", "internal_service", "external", "external_service", "data_asset", "data", "storage", "database", "runtime", "kubernetes", "cloudrun", "cloud_run", "firewall", "firewall_rule", "security_control", "monitoring", "monitoring_control", "other"],
+    "Interaction_Mode": ["sync", "async", "batch", "stream", "read", "write", "publish", "subscribe", "produce", "consume", "other"]
   }
 }

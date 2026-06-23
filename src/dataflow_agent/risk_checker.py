@@ -286,11 +286,25 @@ def _monitoring_findings(workbook: WorkbookData) -> list[Finding]:
 
 
 def _artifact_findings(graph: GraphModel) -> list[Finding]:
+    findings: list[Finding] = []
     if not graph.nodes:
-        return [Finding("Gate 5", "P0", "normalized", "", "nodes", "Graph has no nodes; artifacts cannot be trusted.")]
+        findings.append(Finding("Gate 5", "P0", "normalized", "", "nodes", "Graph has no nodes; artifacts cannot be trusted."))
     if not graph.edges:
-        return [Finding("Gate 5", "P0", "normalized", "", "edges", "Graph has no edges; artifacts cannot be trusted.")]
-    return []
+        findings.append(Finding("Gate 5", "P0", "normalized", "", "edges", "Graph has no edges; artifacts cannot be trusted."))
+    for edge in graph.dropped_edges:
+        findings.append(
+            Finding(
+                "Gate 5",
+                "P1",
+                "normalized",
+                edge.metadata.get("record_id", "") if isinstance(edge.metadata, dict) else "",
+                "edge",
+                f"Dropped graph edge {edge.id} ({edge.type}) from {edge.source or 'N/A'} to {edge.target or 'N/A'}: {edge.reason}.",
+                "Correct the source workbook references and regenerate the package.",
+                evidence_id=edge.evidence_id,
+            )
+        )
+    return findings
 
 
 def _ports_match(dependency_port: str, firewall_ports: str) -> bool:

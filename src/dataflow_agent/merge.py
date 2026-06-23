@@ -40,6 +40,34 @@ class MergeIssue:
 
 
 @dataclass
+class MergeConflictDiff:
+    sheet: str
+    primary_key: str
+    value: str
+    field: str
+    kept_source: str
+    kept_row_number: int
+    kept_value: str
+    conflict_source: str
+    conflict_row_number: int
+    conflict_value: str
+
+    def as_dict(self) -> dict[str, str | int]:
+        return {
+            "sheet": self.sheet,
+            "primary_key": self.primary_key,
+            "value": self.value,
+            "field": self.field,
+            "kept_source": self.kept_source,
+            "kept_row_number": self.kept_row_number,
+            "kept_value": self.kept_value,
+            "conflict_source": self.conflict_source,
+            "conflict_row_number": self.conflict_row_number,
+            "conflict_value": self.conflict_value,
+        }
+
+
+@dataclass
 class MergeResult:
     merged_dcp: Path
     workbook_path: Path
@@ -49,6 +77,7 @@ class MergeResult:
     duplicate_count: int = 0
     conflict_count: int = 0
     lineage: list[dict[str, Any]] = field(default_factory=list)
+    conflict_diffs: list[MergeConflictDiff] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -59,6 +88,7 @@ class MergeResult:
             "duplicate_count": self.duplicate_count,
             "conflict_count": self.conflict_count,
             "lineage": self.lineage,
+            "conflict_diffs": [diff.as_dict() for diff in self.conflict_diffs],
             "issues": [issue.as_dict() for issue in self.issues],
         }
 
@@ -70,7 +100,7 @@ def merge_dcps(inputs: list[Path], output_root: Path, version: str) -> MergeResu
     merged_dcp = output_root / f"merged_dcp_{version}"
     merged_dcp.mkdir(parents=True, exist_ok=True)
     workbooks = [_read_source(path, schema) for path in inputs]
-    merged_sheets, headers, issues, duplicate_count, conflict_count, lineage = _merge_workbooks(workbooks, inputs, schema)
+    merged_sheets, headers, issues, duplicate_count, conflict_count, lineage, conflict_diffs = _merge_workbooks(workbooks, inputs, schema)
     workbook_path = merged_dcp / MERGED_WORKBOOK_NAME
     _write_workbook(workbook_path, merged_sheets, headers, schema)
     result = MergeResult(
@@ -82,6 +112,7 @@ def merge_dcps(inputs: list[Path], output_root: Path, version: str) -> MergeResu
         duplicate_count=duplicate_count,
         conflict_count=conflict_count,
         lineage=lineage,
+        conflict_diffs=conflict_diffs,
     )
     _write_merge_reports(merged_dcp, result)
     return result
@@ -96,21 +127,23 @@ def _merge_workbooks(
     workbooks: list[WorkbookData],
     sources: list[Path],
     schema: dict,
-) -> tuple[dict[str, list[dict[str, str]]], dict[str, list[str]], list[MergeIssue], int, int, list[dict[str, Any]]]:
+) -> tuple[dict[str, list[dict[str, str]]], dict[str, list[str]], list[MergeIssue], int, int, list[dict[str, Any]], list[MergeConflictDiff]]:
     merged: dict[str, list[dict[str, str]]] = {}
     headers: dict[str, list[str]] = {}
     issues: list[MergeIssue] = []
+    conflict_diffs: list[MergeConflictDiff] = []
     duplicate_count = 0
     conflict_count = 0
     lineage_by_key: dict[tuple[str, str, str], dict[str, Any]] = {}
+    kept_meta_by_key: dict[tuple[str, str, str], dict[str, Any]] = {}
 
     for sheet in schema["required_sheets"]:
         pk = schema["sheets"][sheet].get("primary_key") or ""
-        headers[sheet] = schema["sheets"][sheet]["fields"]
+        headers[sheet] = _schema_fields(schema, sheet)
         by_key: dict[str, dict[str, str]] = {}
         rows_without_key: list[dict[str, str]] = []
         for workbook, source in zip(workbooks, sources, strict=True):
-            for row in workbook.sheets.get(sheet, []):
+            for row_idx, row in enumerate(workbook.sheets.get(sheet, []), start=2):
                 normalized = {field: row.get(field, "") for field in headers[sheet]}
                 key = _row_key(sheet, pk, normalized)
                 if not key:
@@ -119,6 +152,7 @@ def _merge_workbooks(
                 if key not in by_key:
                     by_key[key] = normalized
                     lineage_by_key[(sheet, pk, key)] = {"sheet": sheet, "primary_key": pk, "value": key, "kept_source": str(source), "sources": [str(source)]}
+                    kept_meta_by_key[(sheet, pk, key)] = {"source": str(source), "row_number": row_idx}
                     continue
                 lineage_by_key[(sheet, pk, key)]["sources"].append(str(source))
                 if _same_row(by_key[key], normalized):
@@ -127,9 +161,34 @@ def _merge_workbooks(
                     continue
                 conflict_count += 1
                 issues.append(MergeIssue("Conflict", "P1", sheet, pk, key, str(source), "Same primary key has different values; first row was kept."))
+                kept_meta = kept_meta_by_key[(sheet, pk, key)]
+                for field in _different_fields(by_key[key], normalized):
+                    conflict_diffs.append(
+                        MergeConflictDiff(
+                            sheet=sheet,
+                            primary_key=pk,
+                            value=key,
+                            field=field,
+                            kept_source=str(kept_meta["source"]),
+                            kept_row_number=int(kept_meta["row_number"]),
+                            kept_value=by_key[key].get(field, ""),
+                            conflict_source=str(source),
+                            conflict_row_number=row_idx,
+                            conflict_value=normalized.get(field, ""),
+                        )
+                    )
         deduped_keyless = _dedupe_rows_without_key(sheet, rows_without_key, issues, lineage_by_key)
         merged[sheet] = list(by_key.values()) + deduped_keyless
-    return merged, headers, issues, duplicate_count, conflict_count, list(lineage_by_key.values())
+    return merged, headers, issues, duplicate_count, conflict_count, list(lineage_by_key.values()), conflict_diffs
+
+
+def _schema_fields(schema: dict, sheet: str) -> list[str]:
+    config = schema["sheets"][sheet]
+    fields = list(config["fields"])
+    for field in config.get("optional_fields", []):
+        if field not in fields:
+            fields.append(field)
+    return fields
 
 
 def _row_key(sheet: str, pk: str, row: dict[str, str]) -> str:
@@ -143,6 +202,10 @@ def _row_key(sheet: str, pk: str, row: dict[str, str]) -> str:
 def _same_row(a: dict[str, str], b: dict[str, str]) -> bool:
     keys = set(a).union(b)
     return all((a.get(key, "") or "") == (b.get(key, "") or "") for key in keys)
+
+
+def _different_fields(a: dict[str, str], b: dict[str, str]) -> list[str]:
+    return sorted(key for key in set(a).union(b) if (a.get(key, "") or "") != (b.get(key, "") or ""))
 
 
 def _dedupe_rows_without_key(sheet: str, rows: list[dict[str, str]], issues: list[MergeIssue], lineage_by_key: dict[tuple[str, str, str], dict[str, Any]]) -> list[dict[str, str]]:
@@ -175,6 +238,7 @@ def _write_workbook(path: Path, sheets: dict[str, list[dict[str, str]]], headers
 def _write_merge_reports(merged_dcp: Path, result: MergeResult) -> None:
     write_json(merged_dcp / "merge_report.json", result.as_dict())
     write_json(merged_dcp / "merge_lineage.json", result.lineage)
+    write_json(merged_dcp / "conflict_diff.json", [diff.as_dict() for diff in result.conflict_diffs])
     wb = Workbook()
     ws = wb.active
     ws.title = "Merge_Report"
@@ -184,3 +248,86 @@ def _write_merge_reports(merged_dcp: Path, result: MergeResult) -> None:
         row = issue.as_dict()
         ws.append([row[field] for field in fields])
     wb.save(merged_dcp / "merge_report.xlsx")
+
+    diff_wb = Workbook()
+    diff_ws = diff_wb.active
+    diff_ws.title = "Conflict_Diff"
+    diff_fields = [
+        "sheet",
+        "primary_key",
+        "value",
+        "field",
+        "kept_source",
+        "kept_row_number",
+        "kept_value",
+        "conflict_source",
+        "conflict_row_number",
+        "conflict_value",
+    ]
+    diff_ws.append(diff_fields)
+    for diff in result.conflict_diffs:
+        row = diff.as_dict()
+        diff_ws.append([row[field] for field in diff_fields])
+    diff_wb.save(merged_dcp / "conflict_diff.xlsx")
+    if result.conflict_count:
+        (merged_dcp / "DRAFT_CONFLICTS.md").write_text(_draft_conflicts_markdown(result), encoding="utf-8")
+
+
+def _draft_conflicts_markdown(result: MergeResult) -> str:
+    lines = [
+        "# 中文版本",
+        "",
+        "# Draft Conflicts",
+        "",
+        "该合并结果仍存在字段级冲突。使用 `--allow-conflicts` 生成的 draft package 采用 first-kept 值，仅用于审查，不能直接验收。",
+        "",
+        f"- 冲突主键数量：{result.conflict_count}",
+        f"- 字段级差异数量：{len(result.conflict_diffs)}",
+        "",
+        "## 字段级差异",
+        "",
+        "| Sheet | Primary Key | Value | Field | Kept Source:Row | Kept Value | Conflict Source:Row | Conflict Value |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for diff in result.conflict_diffs:
+        lines.append(
+            f"| {diff.sheet} | {diff.primary_key} | {diff.value} | {diff.field} | "
+            f"{diff.kept_source}:{diff.kept_row_number} | {diff.kept_value} | "
+            f"{diff.conflict_source}:{diff.conflict_row_number} | {diff.conflict_value} |"
+        )
+    lines.extend(
+        [
+            "",
+            "修复方式：修改源工作簿后重新运行合并脚本；冲突数应减少，直到可以生成正式包。",
+            "",
+            "---",
+            "",
+            "# English Version",
+            "",
+            "# Draft Conflicts",
+            "",
+            "This merged result still has field-level conflicts. A draft package generated with `--allow-conflicts` uses first-kept values for review only and must not be accepted as a final deliverable.",
+            "",
+            f"- Conflicting primary keys: {result.conflict_count}",
+            f"- Field-level differences: {len(result.conflict_diffs)}",
+            "",
+            "## Field-Level Differences",
+            "",
+            "| Sheet | Primary Key | Value | Field | Kept Source:Row | Kept Value | Conflict Source:Row | Conflict Value |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for diff in result.conflict_diffs:
+        lines.append(
+            f"| {diff.sheet} | {diff.primary_key} | {diff.value} | {diff.field} | "
+            f"{diff.kept_source}:{diff.kept_row_number} | {diff.kept_value} | "
+            f"{diff.conflict_source}:{diff.conflict_row_number} | {diff.conflict_value} |"
+        )
+    lines.extend(
+        [
+            "",
+            "Resolution: correct the source workbook and rerun the merge script. The conflict count should decrease until a final package can be generated.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
