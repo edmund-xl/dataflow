@@ -477,6 +477,7 @@ def test_repository_docs_are_chinese_first_then_english() -> None:
         ROOT / "docs" / "collector_quick_check_guide.md",
         ROOT / "docs" / "aggregation_operator_guide.md",
         ROOT / "docs" / "dataflow_agent_input_contract_v0.1.md",
+        ROOT / "docs" / "devops_dcp_collection_manual.md",
         ROOT / "docs" / "devops_collection_filling_guide.md",
         ROOT / "docs" / "dcp_self_check_guide.md",
         ROOT / "docs" / "package_generation_guide.md",
@@ -536,9 +537,29 @@ def test_generated_docs_are_chinese_first_then_english(tmp_path: Path) -> None:
 def test_devops_docs_and_deterministic_agent_boundary_are_documented() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     collection_guide = (ROOT / "docs" / "devops_collection_filling_guide.md").read_text(encoding="utf-8")
+    manual = (ROOT / "docs" / "devops_dcp_collection_manual.md").read_text(encoding="utf-8")
     contract = (ROOT / "docs" / "dataflow_agent_input_contract_v0.1.md").read_text(encoding="utf-8")
 
     assert "DevOps" in collection_guide
+    assert "docs/devops_dcp_collection_manual.md" in readme
+    assert "docs/devops_dcp_collection_manual.md" in collection_guide
+    for step in range(12):
+        assert f"Step {step}" in manual
+    for required in [
+        "check_dcp.sh",
+        "check_summary.md",
+        "fix_list.md",
+        "Evidence_ID",
+        "Confirmation_Status",
+        "Runtime_Type",
+        "Target_Type",
+        "Interaction_Mode",
+        "templates/dataflow_v1.0/",
+        "samples/DCP_v0.1/",
+        "docs/dataflow_agent_input_contract_v0.1.md",
+        "schemas/workbook_schema.json",
+    ]:
+        assert required in manual
     assert "规则驱动确定性 Agent" in readme
     assert "不凭空补依赖" in readme
     assert "不自动接受安全例外" in readme
@@ -568,6 +589,7 @@ def test_license_and_generic_naming_are_enforced() -> None:
         ROOT / "src" / "dataflow_agent" / "summaries.py",
         ROOT / "docs" / "collector_quick_check_guide.md",
         ROOT / "docs" / "aggregation_operator_guide.md",
+        ROOT / "docs" / "devops_dcp_collection_manual.md",
         ROOT / "docs" / "dataflow_agent_input_contract_v0.1.md",
     ]:
         text = path.read_text(encoding="utf-8")

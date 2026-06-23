@@ -120,6 +120,7 @@ templates/dataflow_v1.0/
 面向日常操作的短文档：
 
 ```text
+docs/devops_dcp_collection_manual.md
 docs/devops_collection_filling_guide.md
 docs/dcp_self_check_guide.md
 docs/package_generation_guide.md
@@ -269,6 +270,7 @@ templates/dataflow_v1.0/
 Short daily-operation documents:
 
 ```text
+docs/devops_dcp_collection_manual.md
 docs/devops_collection_filling_guide.md
 docs/dcp_self_check_guide.md
 docs/package_generation_guide.md

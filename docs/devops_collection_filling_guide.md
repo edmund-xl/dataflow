@@ -6,6 +6,8 @@
 
 本文给 DevOps 和信息采集人员使用，目标是把生产事实填写到标准 DCP 工作簿中，便于 Agent 自动校验、建图、报告和打包。
 
+完整逐步操作手册见 `docs/devops_dcp_collection_manual.md`。
+
 ## 一、填写哪份文件
 
 主工作簿必须使用标准文件名：
@@ -48,6 +50,8 @@ scripts/check_dcp.sh path/to/DCP_v0.1
 ## Abstract
 
 This document is for DevOps and information collection personnel. Its purpose is to help users fill production facts into the standard DCP workbook so the agent can validate, model, render, report, and package the result automatically.
+
+For the complete step-by-step manual, see `docs/devops_dcp_collection_manual.md`.
 
 ## 1. Workbook To Fill
 
