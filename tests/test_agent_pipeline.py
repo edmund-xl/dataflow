@@ -224,6 +224,17 @@ def test_security_docs_and_sensitive_scan_exist() -> None:
     subprocess.run(["scripts/scan_sensitive.sh"], cwd=ROOT, check=True)
 
 
+def test_github_actions_ci_covers_core_flow() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "python -m pytest -q" in workflow
+    assert "scripts/scan_sensitive.sh" in workflow
+    assert "dataflow-agent check samples/DCP_v0.1" in workflow
+    assert "dataflow-agent quick-build samples/DCP_v0.1" in workflow
+    assert "dataflow-agent merge samples/DCP_v0.1 samples/DCP_v0.1" in workflow
+    assert "actions/upload-artifact@v4" in workflow
+
+
 def test_generated_docs_are_chinese_first_then_english(tmp_path: Path) -> None:
     state = run_all(SAMPLE_DCP, tmp_path, "testnetv2", "v0.1-demo")
     package_dir = tmp_path / "dataflow_package_v0.1-demo"

@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    env:
+      DATAFLOW_PYTHON: python
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Scan for sensitive data
+        run: scripts/scan_sensitive.sh
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Run sample self-check
+        run: dataflow-agent check samples/DCP_v0.1 --output ci_artifacts/check
+
+      - name: Run sample package build
+        run: dataflow-agent quick-build samples/DCP_v0.1 --output ci_artifacts/build
+
+      - name: Run sample merge
+        run: dataflow-agent merge samples/DCP_v0.1 samples/DCP_v0.1 --output ci_artifacts/merge
+
+      - name: Verify generated package files
+        run: |
+          test -f ci_artifacts/build/dataflow_package_v0.1-demo/normalized/dataflow_graph.json
+          test -d ci_artifacts/build/dataflow_package_v0.1-demo/diagrams
+          test -d ci_artifacts/build/dataflow_package_v0.1-demo/reports
+          test -f ci_artifacts/build/dataflow_package_v0.1-demo.zip
+          test -f ci_artifacts/merge/merged_dcp_v0.1-demo/merge_report.xlsx
+          test -f ci_artifacts/merge/dataflow_package_v0.1-demo.zip
+
+      - name: Upload sample artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dataflow-sample-artifacts
+          path: ci_artifacts/
+          if-no-files-found: error
