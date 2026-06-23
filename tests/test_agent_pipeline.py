@@ -10,6 +10,7 @@ from zipfile import ZipFile
 
 import pytest
 from docx import Document
+from openpyxl import load_workbook
 
 from dataflow_agent.constants import find_workbook
 from dataflow_agent.diagram_renderer import VIEWS, render_diagrams, render_service_drilldown
@@ -99,6 +100,43 @@ def test_rejected_rows_do_not_enter_graph_and_pending_rows_enter_risk_register()
 
     assert "svc-nginx-entry" not in graph.nodes
     assert any(f.status == "Pending_Confirmation" for f in risks)
+
+
+def test_gcp_risk_rules_cover_security_network_iam_and_monitoring() -> None:
+    schema = load_schema()
+    workbook = read_workbook(SAMPLE_WORKBOOK, schema)
+    workbook.sheets["08_Cloud_Armor"] = []
+    for row in workbook.sheets["02_Networks"]:
+        row["NAT_Name"] = ""
+        row["PSC_or_Peering_Name"] = ""
+    workbook.sheets["07_Firewalls"][0]["Ports"] = "9443"
+    workbook.sheets["09_IAM_SA"].append(
+        {
+            **workbook.sheets["09_IAM_SA"][0],
+            "Record_ID": "rec-test-admin",
+            "IAM_Binding_ID": "iam-test-admin",
+            "Service_Account_ID": "sa-admin",
+            "Used_By_Service_ID": "svc-rpc-api",
+            "Role": "roles/owner",
+            "Justification": "",
+            "Is_High_Privilege": "Yes",
+        }
+    )
+    workbook.sheets["10_Monitoring"] = []
+    normalized = normalize_workbook(workbook, schema)
+    graph = build_graph(normalized)
+
+    risks = check_risks(normalized, graph)
+    messages = "\n".join(f.message for f in risks)
+
+    assert "no Cloud Armor/LB/nginx protection row" in messages
+    assert "no NAT/egress record" in messages
+    assert "no PSC/VPC Peering record" in messages
+    assert "does not match dependency" in messages
+    assert "High privilege IAM binding has no justification" in messages
+    assert "P0 service" in messages
+    assert "Critical dependency" in messages
+    assert "Sensitive data asset" in messages
 
 
 def test_all_diagram_views_render_nonempty_files(tmp_path: Path) -> None:
@@ -295,9 +333,17 @@ def test_generated_docs_are_chinese_first_then_english(tmp_path: Path) -> None:
 
     doc = Document(package_dir / "reports" / "logic_mapping_validation_report.docx")
     paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+    table_values = [cell.text for table in doc.tables for row in table.rows for cell in row.cells if cell.text.strip()]
     assert paragraphs[0] == "中文版本"
+    assert any(text in paragraphs for text in ["结论：Pass", "结论：Needs Review", "结论：Blocked"])
+    assert "P0/P1 validation findings" in table_values
     assert "English Version" in paragraphs
     assert paragraphs.index("中文版本") < paragraphs.index("English Version")
+
+    issue_register = load_workbook(package_dir / "reports" / "issue_risk_register.xlsx")
+    headers = [cell.value for cell in issue_register.active[1]]
+    for field in ["Owner", "Due_Date", "Exception_Decision", "Evidence_ID"]:
+        assert field in headers
 
 
 def test_devops_docs_and_deterministic_agent_boundary_are_documented() -> None:

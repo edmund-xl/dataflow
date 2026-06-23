@@ -56,7 +56,7 @@ def write_findings_workbook(path: Path, title: str, findings: list[Finding]) -> 
     wb = Workbook()
     ws = wb.active
     ws.title = title[:31]
-    fields = ["Gate", "Severity", "Sheet", "Row_ID", "Field", "Message", "Suggested_Action", "Status"]
+    fields = ["Gate", "Severity", "Sheet", "Row_ID", "Field", "Message", "Suggested_Action", "Status", "Owner", "Due_Date", "Exception_Decision", "Evidence_ID"]
     ws.append(fields)
     for finding in findings:
         row = finding.as_row()
@@ -106,4 +106,3 @@ def _autosize(ws: Any) -> None:
         for cell in column:
             max_len = max(max_len, len(str(cell.value or "")))
         ws.column_dimensions[letter].width = min(max_len + 2, 80)
-

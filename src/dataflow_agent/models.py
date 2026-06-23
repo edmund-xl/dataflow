@@ -27,6 +27,10 @@ class Finding:
     message: str
     suggested_action: str = ""
     status: str = "Open"
+    owner: str = ""
+    due_date: str = ""
+    exception_decision: str = ""
+    evidence_id: str = ""
 
     def as_row(self) -> dict[str, str]:
         return {
@@ -38,6 +42,10 @@ class Finding:
             "Message": self.message,
             "Suggested_Action": self.suggested_action,
             "Status": self.status,
+            "Owner": self.owner,
+            "Due_Date": self.due_date,
+            "Exception_Decision": self.exception_decision,
+            "Evidence_ID": self.evidence_id,
         }
 
 
@@ -119,4 +127,3 @@ class GraphModel:
             "nodes": [node.as_dict() for node in self.nodes.values()],
             "edges": [edge.as_dict() for edge in self.edges],
         }
-
