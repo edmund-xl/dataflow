@@ -63,12 +63,21 @@ def make_runtime_paths(input_dir: Path, output_root: Path, version: str) -> Runt
 def find_workbook(input_dir: Path) -> Path:
     if input_dir.is_file() and input_dir.suffix.lower() == ".xlsx":
         return input_dir
+    if input_dir.exists() and not input_dir.is_dir():
+        raise FileNotFoundError(f"Input path is not an .xlsx workbook or DCP directory: {input_dir}")
+    if not input_dir.exists():
+        raise FileNotFoundError(f"Input path does not exist: {input_dir}")
     for name in WORKBOOK_CANDIDATES:
         candidate = input_dir / name
         if candidate.exists():
             return candidate
     matches = sorted(input_dir.glob("*.xlsx"))
-    if matches:
+    if len(matches) == 1:
         return matches[0]
+    if len(matches) > 1:
+        names = ", ".join(path.name for path in matches)
+        raise FileNotFoundError(
+            "Multiple workbook files found but no standard workbook name was present. "
+            f"Use one of {', '.join(WORKBOOK_CANDIDATES)} or pass the workbook file explicitly. Found: {names}"
+        )
     raise FileNotFoundError(f"No workbook found in {input_dir}")
-

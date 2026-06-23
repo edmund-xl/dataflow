@@ -3,12 +3,15 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 from io import BytesIO
 from pathlib import Path
 from zipfile import ZipFile
 
+import pytest
 from docx import Document
 
+from dataflow_agent.constants import find_workbook
 from dataflow_agent.diagram_renderer import VIEWS, render_diagrams
 from dataflow_agent.graph_builder import build_graph
 from dataflow_agent.normalizer import normalize_workbook
@@ -23,6 +26,14 @@ from dataflow_agent.merge import merge_dcps
 ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_DCP = ROOT / "samples" / "DCP_v0.1"
 SAMPLE_WORKBOOK = SAMPLE_DCP / "dataflow_collection_template_v0.1.xlsx"
+
+
+def _script_env() -> dict[str, str]:
+    import os
+
+    env = dict(os.environ)
+    env["DATAFLOW_PYTHON"] = sys.executable
+    return env
 
 
 def test_full_run_outputs_package(tmp_path: Path) -> None:
@@ -136,7 +147,7 @@ def test_merge_identical_dcp_deduplicates_rows(tmp_path: Path) -> None:
 
 
 def test_script_check_dcp_runs_with_defaults() -> None:
-    subprocess.run(["scripts/check_dcp.sh", "samples/DCP_v0.1"], cwd=ROOT, check=True)
+    subprocess.run(["scripts/check_dcp.sh", "samples/DCP_v0.1"], cwd=ROOT, check=True, env=_script_env())
 
     check_dir = SAMPLE_DCP / "agent_check"
     assert (check_dir / "check_summary.md").exists()
@@ -144,19 +155,45 @@ def test_script_check_dcp_runs_with_defaults() -> None:
 
 
 def test_script_build_package_runs_with_defaults() -> None:
-    subprocess.run(["scripts/build_dataflow_package.sh", "samples/DCP_v0.1"], cwd=ROOT, check=True)
+    subprocess.run(["scripts/build_dataflow_package.sh", "samples/DCP_v0.1"], cwd=ROOT, check=True, env=_script_env())
 
     dist_dir = SAMPLE_DCP / "dist"
     assert any(path.name.startswith("dataflow_package_") and path.suffix == ".zip" for path in dist_dir.iterdir())
 
 
 def test_script_merge_dcp_runs_with_defaults() -> None:
-    subprocess.run(["scripts/merge_dcp.sh", "samples/DCP_v0.1", "samples/DCP_v0.1"], cwd=ROOT, check=True)
+    subprocess.run(["scripts/merge_dcp.sh", "samples/DCP_v0.1", "samples/DCP_v0.1"], cwd=ROOT, check=True, env=_script_env())
 
     merge_reports = list((ROOT / "dist").glob("merged_dcp_*/merge_report.xlsx"))
     package_zips = list((ROOT / "dist").glob("dataflow_package_*.zip"))
     assert merge_reports
     assert package_zips
+
+
+def test_scripts_do_not_embed_personal_python_paths() -> None:
+    for path in [
+        ROOT / "scripts" / "check_dcp.sh",
+        ROOT / "scripts" / "build_dataflow_package.sh",
+        ROOT / "scripts" / "merge_dcp.sh",
+    ]:
+        text = path.read_text(encoding="utf-8")
+        assert "DATAFLOW_PYTHON" in text
+        assert "codex-runtimes" not in text
+        assert "/Users/" not in text
+
+
+def test_find_workbook_rejects_ambiguous_nonstandard_xlsx(tmp_path: Path) -> None:
+    dcp = tmp_path / "ambiguous_dcp"
+    dcp.mkdir()
+    first = dcp / "first.xlsx"
+    second = dcp / "second.xlsx"
+    shutil.copy2(SAMPLE_WORKBOOK, first)
+    shutil.copy2(SAMPLE_WORKBOOK, second)
+
+    with pytest.raises(FileNotFoundError, match="Multiple workbook files found"):
+        find_workbook(dcp)
+
+    assert find_workbook(first) == first
 
 
 def test_repository_docs_are_chinese_first_then_english() -> None:

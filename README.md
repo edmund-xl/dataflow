@@ -70,6 +70,12 @@ scripts/merge_dcp.sh DCP_source_a DCP_source_b DCP_source_c
 
 脚本是日常使用入口。底层命令仍保留给开发和排错使用，包括 `check`、`quick-build`、`merge`、`validate`、`normalize`、`build`、`risk`、`render`、`report`、`package` 和 `run`。
 
+如需指定 Python 解释器，可使用环境变量：
+
+```bash
+DATAFLOW_PYTHON=/path/to/python scripts/check_dcp.sh samples/DCP_v0.1
+```
+
 ## 六、通用模板资料包
 
 仓库提供通用数据流图模板资料包，位置为 `templates/dataflow_v1.0/`。该目录保存 v1.0 方案总文档、主数据采集模板、任务采集映射表、数据字典、样例输入、填写说明、智能体输入输出契约、演示图和嵌套模板包。
@@ -184,6 +190,12 @@ The system generates a merged workbook, a merge report, a complete data-flow pac
 ## 5. Engineering Interface
 
 Scripts are the daily operation interface. Lower-level commands remain available for development and troubleshooting, including `check`, `quick-build`, `merge`, `validate`, `normalize`, `build`, `risk`, `render`, `report`, `package`, and `run`.
+
+To use a specific Python interpreter, set the environment variable:
+
+```bash
+DATAFLOW_PYTHON=/path/to/python scripts/check_dcp.sh samples/DCP_v0.1
+```
 
 ## 6. Generic Template Package
 
