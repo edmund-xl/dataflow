@@ -199,6 +199,9 @@ def test_find_workbook_rejects_ambiguous_nonstandard_xlsx(tmp_path: Path) -> Non
 def test_repository_docs_are_chinese_first_then_english() -> None:
     docs = [
         ROOT / "README.md",
+        ROOT / "SECURITY.md",
+        ROOT / "DATA_HANDLING.md",
+        ROOT / "samples" / "README.md",
         ROOT / "docs" / "collector_quick_check_guide.md",
         ROOT / "docs" / "aggregation_operator_guide.md",
         ROOT / "docs" / "dataflow_agent_input_contract_v0.1.md",
@@ -208,6 +211,17 @@ def test_repository_docs_are_chinese_first_then_english() -> None:
         assert "# 中文版本" in text
         assert "# English Version" in text
         assert text.index("# 中文版本") < text.index("# English Version")
+
+
+def test_security_docs_and_sensitive_scan_exist() -> None:
+    security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+    data_handling = (ROOT / "DATA_HANDLING.md").read_text(encoding="utf-8")
+    samples = (ROOT / "samples" / "README.md").read_text(encoding="utf-8")
+
+    assert "真实 DCP" in security
+    assert "不得提交 Git" in data_handling
+    assert "脱敏演示数据" in samples
+    subprocess.run(["scripts/scan_sensitive.sh"], cwd=ROOT, check=True)
 
 
 def test_generated_docs_are_chinese_first_then_english(tmp_path: Path) -> None:
