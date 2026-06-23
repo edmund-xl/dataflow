@@ -217,8 +217,54 @@ def test_merge_identical_dcp_deduplicates_rows(tmp_path: Path) -> None:
     assert result.workbook_path.exists()
     assert (result.merged_dcp / "merge_report.xlsx").exists()
     assert (result.merged_dcp / "merge_report.json").exists()
+    assert (result.merged_dcp / "merge_lineage.json").exists()
+    assert result.lineage
     assert result.duplicate_count > 0
     assert result.conflict_count == 0
+
+
+def test_merge_conflicts_block_final_package_unless_allowed(tmp_path: Path) -> None:
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    shutil.copy2(SAMPLE_WORKBOOK, first / SAMPLE_WORKBOOK.name)
+    second_workbook = second / SAMPLE_WORKBOOK.name
+    shutil.copy2(SAMPLE_WORKBOOK, second_workbook)
+    wb = load_workbook(second_workbook)
+    ws = wb["04_Services"]
+    header_row = next(row for row in range(1, ws.max_row + 1) if any(cell.value == "Service_ID" for cell in ws[row]))
+    headers = [cell.value for cell in ws[header_row]]
+    service_id_col = headers.index("Service_ID") + 1
+    service_name_col = headers.index("Service_Name") + 1
+    for row in range(header_row + 1, ws.max_row + 1):
+        if ws.cell(row, service_id_col).value == "svc-rpc-api":
+            ws.cell(row, service_name_col).value = "RPC API Conflict"
+            break
+    wb.save(second_workbook)
+
+    blocked_out = tmp_path / "blocked"
+    blocked = subprocess.run(
+        [sys.executable, "-m", "dataflow_agent.cli", "merge", str(first), str(second), "--output", str(blocked_out)],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert blocked.returncode == 1
+    assert "Resolve conflicts" in blocked.stderr
+    assert not list(blocked_out.glob("dataflow_package_*.zip"))
+
+    draft_out = tmp_path / "draft"
+    subprocess.run(
+        [sys.executable, "-m", "dataflow_agent.cli", "merge", str(first), str(second), "--output", str(draft_out), "--allow-conflicts"],
+        cwd=ROOT,
+        check=True,
+    )
+    metadata = json.loads((draft_out / "dataflow_package_v0.1-demo" / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["delivery_status"] == "Draft"
+    assert metadata["merge_conflict_count"] > 0
+    assert (draft_out / "dataflow_package_v0.1-demo" / "reports" / "merge_lineage.json").exists()
 
 
 def test_script_check_dcp_runs_with_defaults() -> None:

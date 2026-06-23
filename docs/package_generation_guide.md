@@ -24,7 +24,7 @@ path/to/DCP_v0.1/dist/
 scripts/merge_dcp.sh path/to/DCP_A path/to/DCP_B
 ```
 
-合并时，同主键完全相同的记录会自动去重；同主键但内容不同的记录会进入合并报告，必须在最终验收前处理。
+合并时，同主键完全相同的记录会自动去重；同主键但内容不同的记录会进入合并报告。默认存在冲突时不会生成最终交付包。若需要评审草稿，可使用底层命令追加 `--allow-conflicts`，但草稿包不能用于最终验收。
 
 ## 三、交付内容
 
@@ -63,6 +63,8 @@ scripts/merge_dcp.sh path/to/DCP_A path/to/DCP_B
 ```
 
 Rows with the same primary key and identical content are de-duplicated automatically. Rows with the same primary key but different content are recorded in the merge report and must be resolved before final acceptance.
+
+By default, conflicts prevent final package generation. To create a review draft, use the lower-level command with `--allow-conflicts`; draft packages must not be used for final acceptance.
 
 ## 3. Delivery Content
 

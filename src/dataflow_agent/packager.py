@@ -35,6 +35,16 @@ def write_package_metadata(
         "blocking_validation_finding_count": len([f for f in validation_findings if f.severity in {"P0", "P1"}]),
         "license": "MIT License",
     }
+    merge_report = paths.reports_dir / "merge_report.json"
+    if merge_report.exists():
+        merge_data = json.loads(merge_report.read_text(encoding="utf-8"))
+        metadata["merge_duplicate_count"] = merge_data.get("duplicate_count", 0)
+        metadata["merge_conflict_count"] = merge_data.get("conflict_count", 0)
+    if (paths.reports_dir / "DRAFT_CONFLICTS.md").exists():
+        metadata["delivery_status"] = "Draft"
+        metadata["draft_reason"] = "Unresolved merge conflicts exist; this package must not be used for final acceptance."
+    else:
+        metadata["delivery_status"] = "Final"
     (paths.package_dir / "metadata.json").write_text(json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8")
     return metadata
 
@@ -68,6 +78,8 @@ def write_package_readme(paths: RuntimePaths, metadata: dict) -> None:
         f"- 风险问题数量：{metadata['risk_finding_count']}",
         f"- 阻断级校验问题数量：{metadata['blocking_validation_finding_count']}",
         f"- 开源授权：{metadata['license']}",
+        f"- 交付状态：{metadata.get('delivery_status', 'Final')}",
+        *( [f"- 草稿原因：{metadata['draft_reason']}"] if metadata.get("draft_reason") else [] ),
         "",
         "## 三、结论",
         "",
@@ -102,6 +114,8 @@ def write_package_readme(paths: RuntimePaths, metadata: dict) -> None:
         f"- Risk finding count: {metadata['risk_finding_count']}",
         f"- Blocking validation finding count: {metadata['blocking_validation_finding_count']}",
         f"- Open-source license: {metadata['license']}",
+        f"- Delivery status: {metadata.get('delivery_status', 'Final')}",
+        *( [f"- Draft reason: {metadata['draft_reason']}"] if metadata.get("draft_reason") else [] ),
         "",
         "## 3. Conclusion",
         "",

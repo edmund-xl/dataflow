@@ -48,6 +48,7 @@ class MergeResult:
     row_count: int = 0
     duplicate_count: int = 0
     conflict_count: int = 0
+    lineage: list[dict[str, Any]] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -57,6 +58,7 @@ class MergeResult:
             "row_count": self.row_count,
             "duplicate_count": self.duplicate_count,
             "conflict_count": self.conflict_count,
+            "lineage": self.lineage,
             "issues": [issue.as_dict() for issue in self.issues],
         }
 
@@ -68,7 +70,7 @@ def merge_dcps(inputs: list[Path], output_root: Path, version: str) -> MergeResu
     merged_dcp = output_root / f"merged_dcp_{version}"
     merged_dcp.mkdir(parents=True, exist_ok=True)
     workbooks = [_read_source(path, schema) for path in inputs]
-    merged_sheets, headers, issues, duplicate_count, conflict_count = _merge_workbooks(workbooks, inputs, schema)
+    merged_sheets, headers, issues, duplicate_count, conflict_count, lineage = _merge_workbooks(workbooks, inputs, schema)
     workbook_path = merged_dcp / MERGED_WORKBOOK_NAME
     _write_workbook(workbook_path, merged_sheets, headers, schema)
     result = MergeResult(
@@ -79,6 +81,7 @@ def merge_dcps(inputs: list[Path], output_root: Path, version: str) -> MergeResu
         row_count=sum(len(rows) for rows in merged_sheets.values()),
         duplicate_count=duplicate_count,
         conflict_count=conflict_count,
+        lineage=lineage,
     )
     _write_merge_reports(merged_dcp, result)
     return result
@@ -93,12 +96,13 @@ def _merge_workbooks(
     workbooks: list[WorkbookData],
     sources: list[Path],
     schema: dict,
-) -> tuple[dict[str, list[dict[str, str]]], dict[str, list[str]], list[MergeIssue], int, int]:
+) -> tuple[dict[str, list[dict[str, str]]], dict[str, list[str]], list[MergeIssue], int, int, list[dict[str, Any]]]:
     merged: dict[str, list[dict[str, str]]] = {}
     headers: dict[str, list[str]] = {}
     issues: list[MergeIssue] = []
     duplicate_count = 0
     conflict_count = 0
+    lineage_by_key: dict[tuple[str, str, str], dict[str, Any]] = {}
 
     for sheet in schema["required_sheets"]:
         pk = schema["sheets"][sheet].get("primary_key") or ""
@@ -114,15 +118,18 @@ def _merge_workbooks(
                     continue
                 if key not in by_key:
                     by_key[key] = normalized
+                    lineage_by_key[(sheet, pk, key)] = {"sheet": sheet, "primary_key": pk, "value": key, "kept_source": str(source), "sources": [str(source)]}
                     continue
+                lineage_by_key[(sheet, pk, key)]["sources"].append(str(source))
                 if _same_row(by_key[key], normalized):
                     duplicate_count += 1
                     issues.append(MergeIssue("Duplicate", "Info", sheet, pk, key, str(source), "Duplicate row is identical and was de-duplicated."))
                     continue
                 conflict_count += 1
                 issues.append(MergeIssue("Conflict", "P1", sheet, pk, key, str(source), "Same primary key has different values; first row was kept."))
-        merged[sheet] = list(by_key.values()) + _dedupe_rows_without_key(sheet, rows_without_key, issues)
-    return merged, headers, issues, duplicate_count, conflict_count
+        deduped_keyless = _dedupe_rows_without_key(sheet, rows_without_key, issues, lineage_by_key)
+        merged[sheet] = list(by_key.values()) + deduped_keyless
+    return merged, headers, issues, duplicate_count, conflict_count, list(lineage_by_key.values())
 
 
 def _row_key(sheet: str, pk: str, row: dict[str, str]) -> str:
@@ -138,7 +145,7 @@ def _same_row(a: dict[str, str], b: dict[str, str]) -> bool:
     return all((a.get(key, "") or "") == (b.get(key, "") or "") for key in keys)
 
 
-def _dedupe_rows_without_key(sheet: str, rows: list[dict[str, str]], issues: list[MergeIssue]) -> list[dict[str, str]]:
+def _dedupe_rows_without_key(sheet: str, rows: list[dict[str, str]], issues: list[MergeIssue], lineage_by_key: dict[tuple[str, str, str], dict[str, Any]]) -> list[dict[str, str]]:
     result: list[dict[str, str]] = []
     seen: set[str] = set()
     for row in rows:
@@ -147,6 +154,7 @@ def _dedupe_rows_without_key(sheet: str, rows: list[dict[str, str]], issues: lis
             issues.append(MergeIssue("Duplicate", "Info", sheet, "", "", "", "Duplicate keyless row was de-duplicated."))
             continue
         seen.add(key)
+        lineage_by_key[(sheet, "", key)] = {"sheet": sheet, "primary_key": "", "value": key, "kept_source": "", "sources": [""]}
         result.append(row)
     return result
 
@@ -166,6 +174,7 @@ def _write_workbook(path: Path, sheets: dict[str, list[dict[str, str]]], headers
 
 def _write_merge_reports(merged_dcp: Path, result: MergeResult) -> None:
     write_json(merged_dcp / "merge_report.json", result.as_dict())
+    write_json(merged_dcp / "merge_lineage.json", result.lineage)
     wb = Workbook()
     ws = wb.active
     ws.title = "Merge_Report"
@@ -175,4 +184,3 @@ def _write_merge_reports(merged_dcp: Path, result: MergeResult) -> None:
         row = issue.as_dict()
         ws.append([row[field] for field in fields])
     wb.save(merged_dcp / "merge_report.xlsx")
-

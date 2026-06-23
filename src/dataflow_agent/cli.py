@@ -37,6 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     merge_parser.add_argument("--env", help="Environment name; defaults to first DCP metadata")
     merge_parser.add_argument("--version", help="Package version; defaults to first DCP metadata")
     merge_parser.add_argument("--output", help="Output directory; defaults to ./dist")
+    merge_parser.add_argument("--allow-conflicts", action="store_true", help="Build a draft package even when merge conflicts exist")
 
     build_quick_parser = subparsers.add_parser("quick-build", help="Script-friendly full package build")
     build_quick_parser.add_argument("input", help="DCP directory or workbook path")
@@ -84,9 +85,20 @@ def main(argv: list[str] | None = None) -> int:
         version = args.version or inferred_version
         output_root = Path(args.output).resolve() if args.output else default_merge_output()
         merge_result = merge_dcps(inputs, output_root, version)
+        if merge_result.conflict_count and not args.allow_conflicts:
+            print(f"Merge conflicts: {merge_result.conflict_count}", file=sys.stderr)
+            print(f"Merge report: {merge_result.merged_dcp / 'merge_report.xlsx'}", file=sys.stderr)
+            print("Resolve conflicts or rerun with --allow-conflicts to build a draft package.", file=sys.stderr)
+            return 1
         state = run_all(merge_result.merged_dcp, output_root, env, version, clean_output=True)
         shutil.copy2(merge_result.merged_dcp / "merge_report.json", state.paths.reports_dir / "merge_report.json")
         shutil.copy2(merge_result.merged_dcp / "merge_report.xlsx", state.paths.reports_dir / "merge_report.xlsx")
+        shutil.copy2(merge_result.merged_dcp / "merge_lineage.json", state.paths.reports_dir / "merge_lineage.json")
+        if merge_result.conflict_count:
+            (state.paths.reports_dir / "DRAFT_CONFLICTS.md").write_text(
+                "# Draft Package\n\nThis package was generated with unresolved merge conflicts and must not be used for final acceptance.\n",
+                encoding="utf-8",
+            )
         run_package(state, env, version)
         _print_summary(state)
         print(f"Merged DCP: {merge_result.merged_dcp}")

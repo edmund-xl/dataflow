@@ -50,7 +50,7 @@ dist/
 
 ## 四、冲突处理方法
 
-相同主键且内容一致的记录会自动去重。相同主键但内容不一致的记录会进入合并报告。智能体默认保留首次出现的记录用于后续产物生成，但汇总负责人必须在最终验收前检查并处理冲突。
+相同主键且内容一致的记录会自动去重。相同主键但内容不一致的记录会进入合并报告。默认情况下，只要存在冲突，智能体会停止生成最终交付包，汇总负责人必须先处理冲突。如果确实需要生成评审草稿，可以追加 `--allow-conflicts`，此时 metadata 和报告会标记为 Draft，不能直接用于最终验收。
 
 ## 五、输出结构
 
@@ -133,6 +133,8 @@ The system generates a merged workbook, a merge report, a complete delivery dire
 ## 4. Conflict Handling
 
 Rows with the same primary key and identical content are de-duplicated automatically. Rows with the same primary key but different content are recorded in the merge report. The agent keeps the first row for downstream artifact generation by default, but the data aggregation owner must review and resolve conflicts before final acceptance.
+
+By default, any merge conflict stops final package generation. The data aggregation owner must resolve conflicts first. If a review draft is required, append `--allow-conflicts`; the generated metadata and reports will be marked as Draft and must not be used for final acceptance.
 
 ## 5. Output Structure
 
