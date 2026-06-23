@@ -68,7 +68,28 @@ scripts/merge_dcp.sh DCP_source_a DCP_source_b DCP_source_c
 
 脚本是日常使用入口。底层命令仍保留给开发和排错使用，包括 `check`、`quick-build`、`merge`、`validate`、`normalize`、`build`、`risk`、`render`、`report`、`package` 和 `run`。
 
-## 六、验证方法
+## 六、通用模板资料包
+
+仓库提供通用数据流图模板资料包，位置为 `templates/dataflow_v1.0/`。该目录保存 v1.0 方案总文档、主数据采集模板、任务采集映射表、数据字典、样例输入、填写说明、智能体输入输出契约、演示图和嵌套模板包。
+
+主要文件如下：
+
+```text
+templates/dataflow_v1.0/
+  dataflow_project_final_plan_v1.0.docx
+  dataflow_collection_template_bundle_v1.0.zip
+  dataflow_main_collection_template_v1.0.xlsx
+  dataflow_task_collection_mapping_v1.0.xlsx
+  dataflow_data_dictionary_v1.0.xlsx
+  dataflow_sample_input_v1.0.xlsx
+  dataflow_collection_filling_guide_v1.0.docx
+  dataflow_agent_io_contract_v1.0.md
+  dataflow_overview_demo_v1.0.png
+  dataflow_service_dependency_drilldown_demo_v1.0.png
+  README.md
+```
+
+## 七、验证方法
 
 项目通过自动化测试验证读取、校验、建图、渲染、报告、打包、自检脚本、构建脚本和合并脚本。验证命令如下：
 
@@ -76,15 +97,15 @@ scripts/merge_dcp.sh DCP_source_a DCP_source_b DCP_source_c
 python -m pytest -q
 ```
 
-## 七、版权与授权
+## 八、版权与授权
 
 本项目版权归属 edmund-xl，并采用保留全部权利的私有授权。未经 edmund-xl 事先书面许可，不得复制、修改、合并、发布、分发、再授权、销售，或将本软件用于商业或生产目的。完整授权文本见仓库根目录 `LICENSE` 文件。
 
-## 八、结论
+## 九、结论
 
 该智能体将 Dataflow Project 数据流图交付过程收敛为脚本化、结构化、可重复的工程流程。工作簿填写完成后能够即时反馈数据质量，汇总阶段能够自动合并与产出交付包，从而减少手工整理和手工画图带来的偏差。
 
-## 九、不可变规则
+## 十、不可变规则
 
 工作簿是唯一结构化事实源。如果图或报告存在错误，必须修改工作簿并重新运行脚本，不允许手工修改生成产物。
 
@@ -160,7 +181,28 @@ The system generates a merged workbook, a merge report, a complete data-flow pac
 
 Scripts are the daily operation interface. Lower-level commands remain available for development and troubleshooting, including `check`, `quick-build`, `merge`, `validate`, `normalize`, `build`, `risk`, `render`, `report`, `package`, and `run`.
 
-## 6. Validation Method
+## 6. Generic Template Package
+
+The repository includes a generic data-flow template package at `templates/dataflow_v1.0/`. The directory contains the v1.0 final plan document, main collection template, task collection mapping, data dictionary, sample input, filling guide, agent input/output contract, demo diagrams, and nested template bundle.
+
+Main files:
+
+```text
+templates/dataflow_v1.0/
+  dataflow_project_final_plan_v1.0.docx
+  dataflow_collection_template_bundle_v1.0.zip
+  dataflow_main_collection_template_v1.0.xlsx
+  dataflow_task_collection_mapping_v1.0.xlsx
+  dataflow_data_dictionary_v1.0.xlsx
+  dataflow_sample_input_v1.0.xlsx
+  dataflow_collection_filling_guide_v1.0.docx
+  dataflow_agent_io_contract_v1.0.md
+  dataflow_overview_demo_v1.0.png
+  dataflow_service_dependency_drilldown_demo_v1.0.png
+  README.md
+```
+
+## 7. Validation Method
 
 Automated tests validate reading, validation, graph construction, rendering, reporting, packaging, self-check scripts, build scripts, and merge scripts. The validation command is:
 
@@ -168,14 +210,14 @@ Automated tests validate reading, validation, graph construction, rendering, rep
 python -m pytest -q
 ```
 
-## 7. Copyright And License
+## 8. Copyright And License
 
 This project is proprietary to edmund-xl and all rights are reserved. No permission is granted to copy, modify, merge, publish, distribute, sublicense, sell, or use this software for commercial or production purposes without prior written permission from edmund-xl. The full license text is available in the repository root `LICENSE` file.
 
-## 8. Conclusion
+## 9. Conclusion
 
 The agent turns Dataflow Project data-flow delivery into a scripted, structured, and reproducible engineering workflow. The collection stage receives immediate quality feedback, and the aggregation stage automatically merges data and produces the final delivery package, reducing errors caused by manual assembly and manual diagramming.
 
-## 9. Invariant Rule
+## 10. Invariant Rule
 
 The workbook is the only structured source of truth. If a diagram or report is wrong, correct the workbook and rerun the script. Do not manually edit generated artifacts.

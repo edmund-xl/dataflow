@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from io import BytesIO
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -246,3 +247,50 @@ def test_license_and_generic_naming_are_enforced() -> None:
             if name.endswith((".xml", ".rels")):
                 data = workbook.read(name).decode("utf-8", errors="ignore").lower()
                 assert legacy not in data
+
+
+def test_template_package_has_no_legacy_project_name() -> None:
+    legacy_patterns = ["mega" + "eth", "mega" + " eth", "mega" + "-eth"]
+    template_root = ROOT / "templates" / "dataflow_v1.0"
+    expected_files = {
+        "README.md",
+        "dataflow_agent_io_contract_v1.0.md",
+        "dataflow_collection_filling_guide_v1.0.docx",
+        "dataflow_collection_template_bundle_v1.0.zip",
+        "dataflow_data_dictionary_v1.0.xlsx",
+        "dataflow_main_collection_template_v1.0.xlsx",
+        "dataflow_overview_demo_v1.0.png",
+        "dataflow_project_final_plan_v1.0.docx",
+        "dataflow_sample_input_v1.0.xlsx",
+        "dataflow_service_dependency_drilldown_demo_v1.0.png",
+        "dataflow_task_collection_mapping_v1.0.xlsx",
+    }
+
+    assert template_root.exists()
+    assert {path.name for path in template_root.iterdir() if path.is_file()} == expected_files
+
+    def assert_no_legacy(text: str, label: str) -> None:
+        lowered = text.lower()
+        for pattern in legacy_patterns:
+            assert pattern not in lowered, f"{label} contains legacy project name pattern {pattern!r}"
+
+    def scan_zip_bytes(data: bytes, label: str) -> None:
+        with ZipFile(BytesIO(data)) as archive:
+            for name in archive.namelist():
+                assert_no_legacy(name, f"{label}:{name}")
+                payload = archive.read(name)
+                lower_name = name.lower()
+                if lower_name.endswith((".docx", ".xlsx", ".zip")):
+                    scan_zip_bytes(payload, f"{label}:{name}")
+                elif lower_name.endswith((".xml", ".rels", ".md", ".txt", ".json", ".csv")):
+                    assert_no_legacy(payload.decode("utf-8", errors="ignore"), f"{label}:{name}")
+
+    for path in template_root.rglob("*"):
+        assert_no_legacy(str(path.relative_to(ROOT)), str(path.relative_to(ROOT)))
+        if not path.is_file():
+            continue
+        lower_name = path.name.lower()
+        if lower_name.endswith((".docx", ".xlsx", ".zip")):
+            scan_zip_bytes(path.read_bytes(), str(path.relative_to(ROOT)))
+        elif lower_name.endswith((".md", ".txt", ".json", ".csv")):
+            assert_no_legacy(path.read_text(encoding="utf-8"), str(path.relative_to(ROOT)))
