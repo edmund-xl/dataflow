@@ -86,6 +86,12 @@ scripts/build_service_drilldown.sh samples/DCP_v0.1 svc-rpc-api
 scripts/query_service_ports.sh samples/DCP_v0.1 svc-rpc-api
 ```
 
+如需指定输出文件：
+
+```bash
+scripts/query_service_ports.sh samples/DCP_v0.1 svc-rpc-api --output /tmp/service_ports.json
+```
+
 ## 五、工程接口
 
 脚本是日常使用入口。底层命令仍保留给开发和排错使用，包括 `check`、`quick-build`、`merge`、`drilldown`、`query-port`、`validate`、`normalize`、`build`、`risk`、`render`、`report`、`package` 和 `run`。
@@ -234,6 +240,12 @@ To quickly inspect one service's listen ports, dependencies, firewall rules, and
 
 ```bash
 scripts/query_service_ports.sh samples/DCP_v0.1 svc-rpc-api
+```
+
+To specify the output file:
+
+```bash
+scripts/query_service_ports.sh samples/DCP_v0.1 svc-rpc-api --output /tmp/service_ports.json
 ```
 
 ## 5. Engineering Interface

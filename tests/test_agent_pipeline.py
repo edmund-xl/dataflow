@@ -426,7 +426,7 @@ def test_script_service_drilldown_runs_with_defaults() -> None:
     assert (output_dir / "service_drilldown_svc-rpc-api.mmd").exists()
 
 
-def test_service_port_query_runs_with_defaults() -> None:
+def test_service_port_query_runs_with_defaults(tmp_path: Path) -> None:
     schema = load_schema()
     workbook = normalize_workbook(read_workbook(SAMPLE_WORKBOOK, schema), schema)
     index = build_service_port_index(workbook, "svc-rpc-api")
@@ -438,6 +438,16 @@ def test_service_port_query_runs_with_defaults() -> None:
     assert output_file.exists()
     output = json.loads(output_file.read_text(encoding="utf-8"))
     assert output["service_id"] == "svc-rpc-api"
+
+    custom_output = tmp_path / "custom_service_ports.json"
+    subprocess.run(
+        ["scripts/query_service_ports.sh", "samples/DCP_v0.1", "svc-rpc-api", "--output", str(custom_output)],
+        cwd=ROOT,
+        check=True,
+        env=_script_env(),
+    )
+    custom = json.loads(custom_output.read_text(encoding="utf-8"))
+    assert custom["service_id"] == "svc-rpc-api"
 
 
 def test_scripts_do_not_embed_personal_python_paths() -> None:

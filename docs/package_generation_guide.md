@@ -38,6 +38,12 @@ scripts/merge_dcp.sh path/to/DCP_A path/to/DCP_B
 scripts/query_service_ports.sh path/to/DCP_v0.1 svc-rpc-api
 ```
 
+如需指定输出文件：
+
+```bash
+scripts/query_service_ports.sh path/to/DCP_v0.1 svc-rpc-api --output /tmp/service_ports.json
+```
+
 服务下钻图支持更细粒度的审查参数：
 
 ```bash
@@ -90,6 +96,12 @@ To inspect one service's ports, upstream/downstream dependencies, firewall rules
 
 ```bash
 scripts/query_service_ports.sh path/to/DCP_v0.1 svc-rpc-api
+```
+
+To specify the output file:
+
+```bash
+scripts/query_service_ports.sh path/to/DCP_v0.1 svc-rpc-api --output /tmp/service_ports.json
 ```
 
 Service drilldown diagrams support more granular review options:
