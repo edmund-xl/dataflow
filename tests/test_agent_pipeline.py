@@ -481,6 +481,7 @@ def test_find_workbook_rejects_ambiguous_nonstandard_xlsx(tmp_path: Path) -> Non
 def test_repository_docs_are_chinese_first_then_english() -> None:
     docs = [
         ROOT / "README.md",
+        ROOT / "CHANGELOG.md",
         ROOT / "SECURITY.md",
         ROOT / "DATA_HANDLING.md",
         ROOT / "samples" / "README.md",
@@ -578,6 +579,33 @@ def test_devops_docs_and_deterministic_agent_boundary_are_documented() -> None:
     assert "does not take over production environments" in contract
 
 
+def test_changelog_tracks_current_and_historical_changes() -> None:
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert "# 中文版本" in changelog
+    assert "# English Version" in changelog
+    assert changelog.index("# 中文版本") < changelog.index("# English Version")
+    assert "## Unreleased" in changelog
+    assert "## 0.1.0 - 2026-06-24" in changelog
+    assert 'version = "0.1.0"' in pyproject
+    assert "0.1.0" in changelog
+    assert "历史开发记录 - 2026-06-23 至 2026-06-24" in changelog
+    assert "Historical Development Record - 2026-06-23 To 2026-06-24" in changelog
+    for required in [
+        "MIT License",
+        "service drilldown",
+        "query-port",
+        "Dropped graph edges",
+        "field-level conflict diff",
+        "DevOps DCP Collection Manual",
+        "query_service_ports.sh",
+        "9dadfab",
+        "f064829",
+    ]:
+        assert required in changelog
+
+
 def test_license_and_generic_naming_are_enforced() -> None:
     license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
     assert license_text.startswith("MIT License")
@@ -592,6 +620,7 @@ def test_license_and_generic_naming_are_enforced() -> None:
     ]
     for path in [
         ROOT / "README.md",
+        ROOT / "CHANGELOG.md",
         ROOT / "LICENSE",
         ROOT / "pyproject.toml",
         ROOT / "src" / "dataflow_agent" / "packager.py",
