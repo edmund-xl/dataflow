@@ -8,6 +8,12 @@
 
 ## 一、运行命令
 
+首次使用前可以先检查本机环境：
+
+```bash
+scripts/doctor.sh
+```
+
 ```bash
 scripts/check_dcp.sh path/to/DCP_v0.1
 ```
@@ -16,6 +22,12 @@ scripts/check_dcp.sh path/to/DCP_v0.1
 
 ```bash
 DATAFLOW_PYTHON=/path/to/python scripts/check_dcp.sh path/to/DCP_v0.1
+```
+
+如果需要指定输出目录：
+
+```bash
+scripts/check_dcp.sh path/to/DCP_v0.1 --output /tmp/agent_check
 ```
 
 ## 二、查看结果
@@ -48,6 +60,12 @@ This document explains how to quickly determine whether a DCP is ready for submi
 
 ## 1. Command
 
+Before first use, check the local environment:
+
+```bash
+scripts/doctor.sh
+```
+
 ```bash
 scripts/check_dcp.sh path/to/DCP_v0.1
 ```
@@ -56,6 +74,12 @@ To use a specific Python interpreter:
 
 ```bash
 DATAFLOW_PYTHON=/path/to/python scripts/check_dcp.sh path/to/DCP_v0.1
+```
+
+To specify the output directory:
+
+```bash
+scripts/check_dcp.sh path/to/DCP_v0.1 --output /tmp/agent_check
 ```
 
 ## 2. Review Results

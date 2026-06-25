@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
-  echo "Usage: scripts/merge_dcp.sh <DCP directory or workbook file> [more DCPs...]" >&2
+  echo "Usage: scripts/merge_dcp.sh <DCP directory or workbook file> [more DCPs...] [--env name] [--version version] [--output path] [--allow-conflicts]" >&2
   exit 2
 fi
 

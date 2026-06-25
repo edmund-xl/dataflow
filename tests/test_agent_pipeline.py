@@ -213,8 +213,10 @@ def test_diagrams_show_non_final_statuses(tmp_path: Path) -> None:
 def test_k8s_service_with_data_asset_dependency_end_to_end(tmp_path: Path) -> None:
     schema = load_schema()
     workbook = read_workbook(SAMPLE_WORKBOOK, schema)
-    workbook.headers["04_Services"].extend(["Runtime_Type", "Runtime_ID", "Runtime_Name", "Runtime_Namespace", "Runtime_Cluster", "Runtime_Region"])
-    workbook.headers["05_Dependencies"].extend(["Target_Type", "Target_ID", "Interaction_Mode"])
+    for field in ["Runtime_Type", "Runtime_ID", "Runtime_Name", "Runtime_Namespace", "Runtime_Cluster", "Runtime_Region"]:
+        assert field in workbook.headers["04_Services"]
+    for field in ["Target_Type", "Target_ID", "Interaction_Mode"]:
+        assert field in workbook.headers["05_Dependencies"]
     service = next(row for row in workbook.sheets["04_Services"] if row["Service_ID"] == "svc-rpc-api")
     service.update(
         {
@@ -252,6 +254,23 @@ def test_k8s_service_with_data_asset_dependency_end_to_end(tmp_path: Path) -> No
     assert not [f for f in risks if f.gate == "Gate 5"]
     drilldown_svg = (tmp_path / "service_drilldown_svc-rpc-api.svg").read_text(encoding="utf-8")
     assert "rpc-api-deployment" in drilldown_svg
+
+
+def test_sample_workbook_exposes_runtime_and_target_fields() -> None:
+    schema = load_schema()
+    workbook = read_workbook(SAMPLE_WORKBOOK, schema)
+
+    service = next(row for row in workbook.sheets["04_Services"] if row["Service_ID"] == "svc-rpc-api")
+    dependency = next(row for row in workbook.sheets["05_Dependencies"] if row["Dependency_ID"] == "dep-rpc-sequencer")
+
+    for field in ["Runtime_Type", "Runtime_ID", "Runtime_Name", "Runtime_Namespace", "Runtime_Cluster", "Runtime_Region"]:
+        assert field in workbook.headers["04_Services"]
+        assert field in service
+    for field in ["Target_Type", "Target_ID", "Interaction_Mode"]:
+        assert field in workbook.headers["05_Dependencies"]
+        assert field in dependency
+    assert service["Runtime_Type"] == "Kubernetes"
+    assert dependency["Target_Type"] == "service"
 
 
 def test_service_drilldown_renders_expected_artifacts(tmp_path: Path) -> None:
@@ -391,28 +410,42 @@ def test_merge_conflict_count_decreases_after_source_fix(tmp_path: Path) -> None
     assert resolved.conflict_count < conflicted.conflict_count
 
 
-def test_script_check_dcp_runs_with_defaults() -> None:
+def test_script_check_dcp_runs_with_defaults(tmp_path: Path) -> None:
     subprocess.run(["scripts/check_dcp.sh", "samples/DCP_v0.1"], cwd=ROOT, check=True, env=_script_env())
 
     check_dir = SAMPLE_DCP / "agent_check"
     assert (check_dir / "check_summary.md").exists()
     assert (check_dir / "fix_list.md").exists()
 
+    custom_check = tmp_path / "agent_check"
+    subprocess.run(["scripts/check_dcp.sh", "samples/DCP_v0.1", "--output", str(custom_check)], cwd=ROOT, check=True, env=_script_env())
+    assert (custom_check / "check_summary.md").exists()
+    assert (custom_check / "fix_list.md").exists()
 
-def test_script_build_package_runs_with_defaults() -> None:
+
+def test_script_build_package_runs_with_defaults(tmp_path: Path) -> None:
     subprocess.run(["scripts/build_dataflow_package.sh", "samples/DCP_v0.1"], cwd=ROOT, check=True, env=_script_env())
 
     dist_dir = SAMPLE_DCP / "dist"
     assert any(path.name.startswith("dataflow_package_") and path.suffix == ".zip" for path in dist_dir.iterdir())
 
+    custom_dist = tmp_path / "dist"
+    subprocess.run(["scripts/build_dataflow_package.sh", "samples/DCP_v0.1", "--output", str(custom_dist)], cwd=ROOT, check=True, env=_script_env())
+    assert any(path.name.startswith("dataflow_package_") and path.suffix == ".zip" for path in custom_dist.iterdir())
 
-def test_script_merge_dcp_runs_with_defaults() -> None:
+
+def test_script_merge_dcp_runs_with_defaults(tmp_path: Path) -> None:
     subprocess.run(["scripts/merge_dcp.sh", "samples/DCP_v0.1", "samples/DCP_v0.1"], cwd=ROOT, check=True, env=_script_env())
 
     merge_reports = list((ROOT / "dist").glob("merged_dcp_*/merge_report.xlsx"))
     package_zips = list((ROOT / "dist").glob("dataflow_package_*.zip"))
     assert merge_reports
     assert package_zips
+
+    custom_merge = tmp_path / "merge"
+    subprocess.run(["scripts/merge_dcp.sh", "samples/DCP_v0.1", "samples/DCP_v0.1", "--output", str(custom_merge)], cwd=ROOT, check=True, env=_script_env())
+    assert list(custom_merge.glob("merged_dcp_*/merge_report.xlsx"))
+    assert list(custom_merge.glob("dataflow_package_*.zip"))
 
 
 def test_script_service_drilldown_runs_with_defaults() -> None:
@@ -450,8 +483,19 @@ def test_service_port_query_runs_with_defaults(tmp_path: Path) -> None:
     assert custom["service_id"] == "svc-rpc-api"
 
 
+def test_doctor_script_checks_environment() -> None:
+    result = subprocess.run(["scripts/doctor.sh", "samples/DCP_v0.1"], cwd=ROOT, check=True, env=_script_env(), text=True, capture_output=True)
+
+    assert "Dataflow Agent Doctor" in result.stdout
+    assert "READY" in result.stdout
+    assert "WARN" in result.stdout
+    assert "MISSING" in result.stdout
+    assert "missing=0" in result.stdout
+
+
 def test_scripts_do_not_embed_personal_python_paths() -> None:
     for path in [
+        ROOT / "scripts" / "doctor.sh",
         ROOT / "scripts" / "check_dcp.sh",
         ROOT / "scripts" / "build_dataflow_package.sh",
         ROOT / "scripts" / "merge_dcp.sh",
@@ -516,6 +560,7 @@ def test_github_actions_ci_covers_core_flow() -> None:
 
     assert "python -m pytest -q" in workflow
     assert "scripts/scan_sensitive.sh" in workflow
+    assert "scripts/doctor.sh samples/DCP_v0.1" in workflow
     assert "dataflow-agent check samples/DCP_v0.1" in workflow
     assert "dataflow-agent quick-build samples/DCP_v0.1" in workflow
     assert "dataflow-agent merge samples/DCP_v0.1 samples/DCP_v0.1" in workflow
@@ -557,6 +602,7 @@ def test_devops_docs_and_deterministic_agent_boundary_are_documented() -> None:
     for step in range(12):
         assert f"Step {step}" in manual
     for required in [
+        "doctor.sh",
         "check_dcp.sh",
         "check_summary.md",
         "fix_list.md",
@@ -600,6 +646,7 @@ def test_changelog_tracks_current_and_historical_changes() -> None:
         "field-level conflict diff",
         "DevOps DCP Collection Manual",
         "query_service_ports.sh",
+        "doctor.sh",
         "9dadfab",
         "f064829",
     ]:
@@ -701,3 +748,31 @@ def test_template_package_has_no_legacy_project_name() -> None:
             scan_zip_bytes(path.read_bytes(), str(path.relative_to(ROOT)))
         elif lower_name.endswith((".md", ".txt", ".json", ".csv")):
             assert_no_legacy(path.read_text(encoding="utf-8"), str(path.relative_to(ROOT)))
+
+
+def test_template_package_exposes_runtime_and_target_fields() -> None:
+    template_root = ROOT / "templates" / "dataflow_v1.0"
+    main_template = load_workbook(template_root / "dataflow_main_collection_template_v1.0.xlsx", data_only=True)
+    sample_template = load_workbook(template_root / "dataflow_sample_input_v1.0.xlsx", data_only=True)
+    dictionary = load_workbook(template_root / "dataflow_data_dictionary_v1.0.xlsx", data_only=True)
+
+    service_headers = [cell.value for cell in main_template["04_服务"][5]]
+    dependency_headers = [cell.value for cell in main_template["05_依赖关系"][5]]
+    for field in ["运行类型(Runtime_Type)", "运行ID(Runtime_ID)", "运行名称(Runtime_Name)", "运行命名空间(Runtime_Namespace)", "运行集群(Runtime_Cluster)", "运行区域(Runtime_Region)"]:
+        assert field in service_headers
+    for field in ["目标类型(Target_Type)", "目标ID(Target_ID)", "交互模式(Interaction_Mode)"]:
+        assert field in dependency_headers
+
+    sample_service_headers = [cell.value for cell in sample_template["04_服务"][5]]
+    runtime_type_col = sample_service_headers.index("运行类型(Runtime_Type)") + 1
+    assert sample_template["04_服务"].cell(7, runtime_type_col).value == "Kubernetes"
+
+    dictionary_fields = {row[1] for row in dictionary["数据字典"].iter_rows(min_row=2, values_only=True)}
+    assert "运行类型(Runtime_Type)" in dictionary_fields
+    assert "目标类型(Target_Type)" in dictionary_fields
+
+    with ZipFile(template_root / "dataflow_collection_template_bundle_v1.0.zip") as archive:
+        nested_main = load_workbook(BytesIO(archive.read("dataflow_main_collection_template_v1.0.xlsx")), data_only=True)
+        nested_headers = [cell.value for cell in nested_main["04_服务"][5]]
+        assert "运行类型(Runtime_Type)" in nested_headers
+        assert "目标类型(Target_Type)" in archive.read("README.md").decode("utf-8")

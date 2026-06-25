@@ -21,3 +21,9 @@
 2. DevOps 同时提交原始导出、证据和说明文件。
 3. 智能体读取主采集表和证据包，完成校验、建模、出图、报告和打包。
 4. 如果图或报告有误，回到主采集表修正数据后重新生成，不手工修改图或报告。
+
+## 字段更新
+
+- `04_服务` 已预留运行上下文字段：运行类型(Runtime_Type)、运行ID(Runtime_ID)、运行名称(Runtime_Name)、运行命名空间(Runtime_Namespace)、运行集群(Runtime_Cluster)、运行区域(Runtime_Region)。
+- `05_依赖关系` 已预留显式依赖目标字段：目标类型(Target_Type)、目标ID(Target_ID)、交互模式(Interaction_Mode)。
+- `dataflow_data_dictionary_v1.0.xlsx` 已同步这些字段的填写含义和智能体用途。

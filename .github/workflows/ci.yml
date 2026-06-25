@@ -27,6 +27,9 @@ jobs:
       - name: Scan for sensitive data
         run: scripts/scan_sensitive.sh
 
+      - name: Run environment doctor
+        run: scripts/doctor.sh samples/DCP_v0.1
+
       - name: Run tests
         run: python -m pytest -q
 

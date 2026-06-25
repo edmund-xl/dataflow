@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ $# -lt 2 ]]; then
-  echo "Usage: scripts/build_service_drilldown.sh <DCP directory or workbook file> <Service_ID> [--depth N] [--direction upstream|downstream|both] [--theme auto|light|dark|security] [--risk-focus]" >&2
+  echo "Usage: scripts/build_service_drilldown.sh <DCP directory or workbook file> <Service_ID> [--output path] [--depth N] [--direction upstream|downstream|both] [--theme auto|light|dark|security] [--risk-focus]" >&2
   exit 2
 fi
 

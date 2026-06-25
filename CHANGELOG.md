@@ -6,7 +6,16 @@
 
 ## Unreleased
 
-暂无未发布变更。后续每次用户可见变更先记录在本节，正式发版时再移动到对应版本号下。
+### Added
+
+- 新增 `scripts/doctor.sh`，用于首次使用或换机器后的环境自检，输出 `READY / WARN / MISSING`。
+- 样例 DCP 工作簿补齐 runtime 字段和显式依赖目标字段，便于直接填写 `Runtime_Type`、`Runtime_ID`、`Runtime_Name`、`Runtime_Namespace`、`Runtime_Cluster`、`Runtime_Region`、`Target_Type`、`Target_ID` 和 `Interaction_Mode`。
+
+### Changed
+
+- `scripts/check_dcp.sh` 和 `scripts/build_dataflow_package.sh` 支持透传 `--env`、`--version`、`--output` 等底层 CLI 参数。
+- 通用 v1.0 模板资料包同步补齐 runtime / target / interaction 字段、数据字典说明和嵌套模板包内容。
+- README、DCP 自检说明、交付包生成说明和 DevOps manual 增加环境自检与脚本自定义输出示例。
 
 ## 0.1.0 - 2026-06-24
 
@@ -97,7 +106,16 @@ This file records user-visible changes to Dataflow Agent. The repository does no
 
 ## Unreleased
 
-No unreleased changes yet. Future user-visible changes should be recorded here first and moved to a release version when published.
+### Added
+
+- Added `scripts/doctor.sh` for first-use or new-machine environment checks with `READY / WARN / MISSING` output.
+- Added runtime fields and explicit dependency target fields to the sample DCP workbook, so users can directly fill `Runtime_Type`, `Runtime_ID`, `Runtime_Name`, `Runtime_Namespace`, `Runtime_Cluster`, `Runtime_Region`, `Target_Type`, `Target_ID`, and `Interaction_Mode`.
+
+### Changed
+
+- `scripts/check_dcp.sh` and `scripts/build_dataflow_package.sh` now forward lower-level CLI options such as `--env`, `--version`, and `--output`.
+- Synchronized the generic v1.0 template package with runtime / target / interaction fields, data dictionary notes, and the nested template bundle.
+- Updated README, DCP self-check guide, package generation guide, and DevOps manual with the environment doctor and custom output examples.
 
 ## 0.1.0 - 2026-06-24
 

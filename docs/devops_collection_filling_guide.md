@@ -33,6 +33,12 @@ dataflow_collection_template_v0.1.xlsx
 
 ## 四、提交前检查
 
+首次使用前可以先运行：
+
+```bash
+scripts/doctor.sh
+```
+
 填写完成后运行：
 
 ```bash
@@ -77,6 +83,12 @@ Do not place multiple non-standard Excel files in the same DCP directory. If ano
 Each key record should reference an evidence ID from `14_Evidence_Index`. Evidence may be a sanitized screenshot, configuration snippet, command output, audit record, or internal note link.
 
 ## 4. Pre-Submission Check
+
+Before first use, run:
+
+```bash
+scripts/doctor.sh
+```
 
 After filling the workbook, run:
 

@@ -120,6 +120,27 @@
 | 监控覆盖 | 服务/服务器/数据资产与监控对象的关系 |
 | 部署到 | CI/CD 流水线与服务或实例的关系 |
 
+## 7.1 可选增强字段
+
+`04_服务` 可以填写运行上下文字段，用于生成 runtime 节点、服务下钻图和边 metadata：
+
+```text
+运行类型(Runtime_Type)
+运行ID(Runtime_ID)
+运行名称(Runtime_Name)
+运行命名空间(Runtime_Namespace)
+运行集群(Runtime_Cluster)
+运行区域(Runtime_Region)
+```
+
+`05_依赖关系` 可以填写显式依赖目标字段。当这些字段存在时，智能体优先使用它们解析依赖目标；旧版目标服务、目标外部服务、目标数据资产字段仍然兼容：
+
+```text
+目标类型(Target_Type)
+目标ID(Target_ID)
+交互模式(Interaction_Mode)
+```
+
 ## 8. 输出目录
 
 ```text

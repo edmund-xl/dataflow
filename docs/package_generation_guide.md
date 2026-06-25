@@ -8,6 +8,12 @@
 
 ## 一、单个 DCP 出包
 
+首次使用前可以先检查本机环境：
+
+```bash
+scripts/doctor.sh
+```
+
 ```bash
 scripts/build_dataflow_package.sh path/to/DCP_v0.1
 ```
@@ -18,13 +24,25 @@ scripts/build_dataflow_package.sh path/to/DCP_v0.1
 path/to/DCP_v0.1/dist/
 ```
 
+指定输出目录：
+
+```bash
+scripts/build_dataflow_package.sh path/to/DCP_v0.1 --output /tmp/dataflow_dist
+```
+
 ## 二、多个 DCP 合并出包
 
 ```bash
 scripts/merge_dcp.sh path/to/DCP_A path/to/DCP_B
 ```
 
-合并时，同主键完全相同的记录会自动去重；同主键但内容不同的记录会进入合并报告和字段级 `conflict_diff.xlsx`。默认存在冲突时不会生成最终交付包。若需要评审草稿，可使用底层命令追加 `--allow-conflicts`；草稿包采用 first-kept 值，`DRAFT_CONFLICTS.md` 会列出冲突主键、字段和值，草稿包不能用于最终验收。
+合并时，同主键完全相同的记录会自动去重；同主键但内容不同的记录会进入合并报告和字段级 `conflict_diff.xlsx`。默认存在冲突时不会生成最终交付包。若需要评审草稿，可追加 `--allow-conflicts`；草稿包采用 first-kept 值，`DRAFT_CONFLICTS.md` 会列出冲突主键、字段和值，草稿包不能用于最终验收。
+
+指定输出目录：
+
+```bash
+scripts/merge_dcp.sh path/to/DCP_A path/to/DCP_B --output /tmp/dataflow_merge
+```
 
 ## 三、交付内容
 
@@ -66,6 +84,12 @@ This document is for the data aggregation owner and explains how to generate a c
 
 ## 1. Build One DCP
 
+Before first use, check the local environment:
+
+```bash
+scripts/doctor.sh
+```
+
 ```bash
 scripts/build_dataflow_package.sh path/to/DCP_v0.1
 ```
@@ -76,6 +100,12 @@ Default output:
 path/to/DCP_v0.1/dist/
 ```
 
+Specify the output directory:
+
+```bash
+scripts/build_dataflow_package.sh path/to/DCP_v0.1 --output /tmp/dataflow_dist
+```
+
 ## 2. Merge Multiple DCPs
 
 ```bash
@@ -84,7 +114,13 @@ scripts/merge_dcp.sh path/to/DCP_A path/to/DCP_B
 
 Rows with the same primary key and identical content are de-duplicated automatically. Rows with the same primary key but different content are recorded in the merge report and field-level `conflict_diff.xlsx`; they must be resolved before final acceptance.
 
-By default, conflicts prevent final package generation. To create a review draft, use the lower-level command with `--allow-conflicts`; the draft package uses first-kept values, `DRAFT_CONFLICTS.md` lists the conflicting keys, fields, and values, and draft packages must not be used for final acceptance.
+By default, conflicts prevent final package generation. To create a review draft, append `--allow-conflicts`; the draft package uses first-kept values, `DRAFT_CONFLICTS.md` lists the conflicting keys, fields, and values, and draft packages must not be used for final acceptance.
+
+Specify the output directory:
+
+```bash
+scripts/merge_dcp.sh path/to/DCP_A path/to/DCP_B --output /tmp/dataflow_merge
+```
 
 ## 3. Delivery Content
 
