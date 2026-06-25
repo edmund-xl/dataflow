@@ -4,6 +4,14 @@ from .models import Row, WorkbookData
 from .util import clean
 
 
+COVERAGE_STATUS_ALIASES = {
+    "Partially_Covered": "Partial",
+    "Partially Covered": "Partial",
+    "Not_Covered": "Missing",
+    "Not Covered": "Missing",
+}
+
+
 def normalize_workbook(workbook: WorkbookData, schema: dict) -> WorkbookData:
     normalized_sheets: dict[str, list[Row]] = {}
     for sheet, rows in workbook.sheets.items():
@@ -32,6 +40,8 @@ def _normalize_row(row: Row) -> Row:
         result["Protocol"] = result["Protocol"].upper()
     if result.get("Target_Port_Protocol"):
         result["Target_Port_Protocol"] = result["Target_Port_Protocol"].upper()
+    if result.get("Coverage_Status") in COVERAGE_STATUS_ALIASES:
+        result["Coverage_Status"] = COVERAGE_STATUS_ALIASES[result["Coverage_Status"]]
     if not result.get("Confirmation_Status") and "Confirmation_Status" in result:
         result["Confirmation_Status"] = "Pending_Confirmation"
     return result

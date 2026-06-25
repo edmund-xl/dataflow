@@ -23,18 +23,21 @@ def _write_summary(
     pending: list[Finding],
 ) -> None:
     status = "PASS" if not blocking else "NEEDS_FIX"
+    submit_cn = "可以提交给数据汇总负责人。" if status == "PASS" else "暂不建议提交；请先处理 P0/P1 或阻断级问题。"
+    submit_en = "Ready to submit to the data aggregation owner." if status == "PASS" else "Do not submit yet; resolve P0/P1 or blocking findings first."
     lines = [
         "# 中文版本",
         "",
-        "# Dataflow Project 采集包自检摘要工程白皮书",
+        "# Dataflow Project 采集包自检摘要",
         "",
-        "## 摘要",
+        "## 结论",
         "",
-        "本文记录当前采集包的智能体自检结果，用于判断采集数据是否具备提交或汇总条件。",
+        f"- 自检状态：`{status}`",
+        f"- 提交判断：{submit_cn}",
+        f"- 下一步：{'可进入汇总或出包流程。' if status == 'PASS' else '打开 `fix_list.md`，修改源工作簿后重新运行 `scripts/check_dcp.sh`。'}",
         "",
-        "## 一、结果摘要",
+        "## 关键指标",
         "",
-        f"- 状态：{status}",
         f"- 工作簿：`{state.paths.workbook_path}`",
         f"- 产物目录：`{state.paths.package_dir}`",
         f"- 节点数量：{len(state.graph.nodes)}",
@@ -45,11 +48,11 @@ def _write_summary(
         f"- 待确认问题数量：{len(pending)}",
         f"- 丢弃关系数量：{len(state.graph.dropped_edges)}",
         "",
-        "## 二、使用结论",
+        "## 处理规则",
         "",
-        "如果状态为 `NEEDS_FIX`，请先阅读修复清单并修改源工作簿，然后重新运行自检脚本。",
+        "所有问题都应回到源工作簿修正。不要手工修改生成的报告、图或压缩包。",
         "",
-        "## 三、开源授权",
+        "## 开源授权",
         "",
         "本项目采用 MIT License 开源授权。版权归属 edmund-xl；使用者可以在遵守许可证条款的前提下复制、使用、修改、分发和商用本软件副本。完整授权文本见仓库根目录 `LICENSE` 文件。",
         "",
@@ -57,15 +60,16 @@ def _write_summary(
         "",
         "# English Version",
         "",
-        "# Dataflow Project Collection Package Check Summary Engineering White Paper",
+        "# Dataflow Project Collection Package Check Summary",
         "",
-        "## Abstract",
+        "## Conclusion",
         "",
-        "This document records the agent self-check result for the current collection package and helps determine whether the data is ready for submission or aggregation.",
+        f"- Check status: `{status}`",
+        f"- Submission decision: {submit_en}",
+        f"- Next step: {'Proceed to aggregation or package generation.' if status == 'PASS' else 'Open `fix_list.md`, correct the source workbook, and rerun `scripts/check_dcp.sh`.'}",
         "",
-        "## 1. Result Summary",
+        "## Key Metrics",
         "",
-        f"- Status: {status}",
         f"- Workbook: `{state.paths.workbook_path}`",
         f"- Package directory: `{state.paths.package_dir}`",
         f"- Graph nodes: {len(state.graph.nodes)}",
@@ -76,11 +80,11 @@ def _write_summary(
         f"- Pending confirmation findings: {len(pending)}",
         f"- Dropped graph edges: {len(state.graph.dropped_edges)}",
         "",
-        "## 2. Operational Conclusion",
+        "## Handling Rule",
         "",
-        "If the status is `NEEDS_FIX`, read the fix list, correct the source workbook, and run the self-check script again.",
+        "Correct every issue in the source workbook. Do not manually edit generated reports, diagrams, or archives.",
         "",
-        "## 3. Open-Source License",
+        "## Open-Source License",
         "",
         "This project is released under the MIT License. Copyright remains with edmund-xl, and users may copy, use, modify, distribute, and use the software commercially subject to the license terms. The full license text is available in the repository root `LICENSE` file.",
         "",
@@ -96,28 +100,21 @@ def _write_fix_list(path: Path, findings: list[Finding]) -> None:
         )
         return
     sorted_findings = sorted(findings, key=lambda f: (_severity_order(f.severity), f.sheet, f.row_id, f.field))
+    blocking_count = len([finding for finding in sorted_findings if finding.severity in {"P0", "P1"}])
     lines = [
         "# 中文版本",
         "",
-        "# 修复清单工程白皮书",
+        "# 修复清单",
         "",
-        "## 摘要",
+        "## 处理结论",
         "",
-        "本文列出智能体发现的待修复项。请先处理高严重度问题，再处理待确认和普通风险项。",
+        f"- 发现问题：{len(sorted_findings)}",
+        f"- 阻断或高优先级问题：{blocking_count}",
+        "- 处理方式：只修改源工作簿，然后重新运行自检脚本。",
+        "- 建议顺序：先处理 P0/P1，再处理 Pending_Confirmation 和 P2/P3。",
         "",
     ]
-    for idx, finding in enumerate(sorted_findings, 1):
-        lines.extend(
-            [
-                f"## {idx}. [{finding.severity}] {finding.sheet} {finding.row_id}",
-                "",
-                f"- 门禁：{_gate_cn(finding.gate)}",
-                f"- 字段：{finding.field or '无'}",
-                f"- 问题摘要：{_finding_summary_cn(finding)}",
-                f"- 状态：{finding.status}",
-                "",
-            ]
-        )
+    _append_finding_groups_cn(lines, sorted_findings)
     lines.extend(
         [
             "## 开源授权",
@@ -128,32 +125,71 @@ def _write_fix_list(path: Path, findings: list[Finding]) -> None:
             "",
             "# English Version",
             "",
-            "# Fix List Engineering White Paper",
+            "# Fix List",
             "",
-            "## Abstract",
+            "## Operational Conclusion",
             "",
-            "This document lists findings that require correction. Address higher-severity issues first, then pending confirmations and ordinary risks.",
+            f"- Findings: {len(sorted_findings)}",
+            f"- Blocking or high-priority findings: {blocking_count}",
+            "- Handling: edit only the source workbook, then rerun the self-check script.",
+            "- Recommended order: resolve P0/P1 first, then Pending_Confirmation and P2/P3.",
             "",
+        ]
+    )
+    _append_finding_groups_en(lines, sorted_findings)
+    lines.extend(
+        [
             "## Open-Source License",
             "",
             "This project is released under the MIT License. Copyright remains with edmund-xl, and users may copy, use, modify, distribute, and use the software commercially subject to the license terms. The full license text is available in the repository root `LICENSE` file.",
             "",
         ]
     )
-    for idx, finding in enumerate(sorted_findings, 1):
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _append_finding_groups_cn(lines: list[str], findings: list[Finding]) -> None:
+    current_group = ""
+    for idx, finding in enumerate(findings, 1):
+        group = f"{finding.severity} / {finding.sheet}"
+        if group != current_group:
+            current_group = group
+            lines.extend([f"## {group}", ""])
         lines.extend(
             [
-                f"## {idx}. [{finding.severity}] {finding.sheet} {finding.row_id}",
+                f"### {idx}. {finding.row_id or '未指定主键'}",
                 "",
-                f"- Gate: {finding.gate}",
-                f"- Field: {finding.field or 'N/A'}",
-                f"- Message: {finding.message}",
-                f"- Suggested action: {finding.suggested_action or 'Review and correct the source workbook.'}",
-                f"- Status: {finding.status}",
+                f"- 字段：{finding.field or '无'}",
+                f"- 门禁：{_gate_cn(finding.gate)}",
+                f"- 状态：{finding.status}",
+                f"- 问题：{_finding_summary_cn(finding)}",
+                f"- 修复建议：{_finding_action_cn(finding)}",
+                f"- 证据：{finding.evidence_id or '无'}",
                 "",
             ]
         )
-    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _append_finding_groups_en(lines: list[str], findings: list[Finding]) -> None:
+    current_group = ""
+    for idx, finding in enumerate(findings, 1):
+        group = f"{finding.severity} / {finding.sheet}"
+        if group != current_group:
+            current_group = group
+            lines.extend([f"## {group}", ""])
+        lines.extend(
+            [
+                f"### {idx}. {finding.row_id or 'No row id'}",
+                "",
+                f"- Field: {finding.field or 'N/A'}",
+                f"- Gate: {finding.gate}",
+                f"- Status: {finding.status}",
+                f"- Message: {finding.message}",
+                f"- Suggested action: {finding.suggested_action or 'Review and correct the source workbook.'}",
+                f"- Evidence: {finding.evidence_id or 'N/A'}",
+                "",
+            ]
+        )
 
 
 def _severity_order(severity: str) -> int:
@@ -184,3 +220,26 @@ def _finding_summary_cn(finding: Finding) -> str:
     if "duplicate" in finding.message.lower():
         return "主键或记录重复，需要去重或调整标识。"
     return "智能体发现该记录需要复核，请结合机器可读报告查看原始细节。"
+
+
+def _finding_action_cn(finding: Finding) -> str:
+    if finding.suggested_action:
+        return _translate_action_cn(finding.suggested_action)
+    if finding.status == "Pending_Confirmation":
+        return "确认该记录，或在源表中改成已接受例外后再提交。"
+    return "复核该行并在源工作簿中修正。"
+
+
+def _translate_action_cn(action: str) -> str:
+    lowered = action.lower()
+    if "monitoring" in lowered or "dashboard" in lowered or "alert" in lowered:
+        return "在 `10_Monitoring` 中补充对应对象的监控、日志、告警或仪表盘记录。"
+    if "firewall" in lowered:
+        return "在 `07_Firewalls` 中补充关联规则，或在源表中记录已接受例外。"
+    if "confirm the row" in lowered:
+        return "确认该记录后把 `Confirmation_Status` 改为 `Confirmed`，或按流程记录例外。"
+    if "correct the id" in lowered or "missing target" in lowered:
+        return "修正引用 ID，或补充被引用的目标记录。"
+    if "fill" in lowered:
+        return "补齐源工作簿中的必填字段。"
+    return action

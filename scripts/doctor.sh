@@ -8,7 +8,7 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-DCP_INPUT="${1:-samples/DCP_v0.1}"
+DCP_INPUT="${1:-samples/DCP_clean_v0.1}"
 
 if [[ -n "${DATAFLOW_PYTHON:-}" ]]; then
   PYTHON_BIN="${DATAFLOW_PYTHON}"
@@ -109,6 +109,7 @@ for script_name in [
     "merge_dcp.sh",
     "build_service_drilldown.sh",
     "query_service_ports.sh",
+    "setup_env.sh",
 ]:
     script_path = repo_root / "scripts" / script_name
     if script_path.exists() and script_path.stat().st_mode & 0o111:
@@ -120,6 +121,12 @@ print()
 section("READY", ready)
 section("WARN", warn)
 section("MISSING", missing)
+if missing:
+    print()
+    print("Suggested setup:")
+    print("- Run scripts/setup_env.sh from the repository root.")
+    print("- Then run: export DATAFLOW_PYTHON=\"$(pwd)/.venv/bin/python\"")
+    print("- Recheck with: scripts/doctor.sh")
 print()
 print(f"Summary: ready={len(ready)} warn={len(warn)} missing={len(missing)}")
 raise SystemExit(1 if missing else 0)

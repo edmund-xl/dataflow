@@ -6,7 +6,7 @@ import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .constants import RuntimePaths
+from .constants import RuntimePaths, SCHEMA_VERSION, TEMPLATE_VERSION
 from .models import Finding, GraphModel, WorkbookData
 from .util import file_sha256
 
@@ -26,6 +26,8 @@ def write_package_metadata(
         "version": version,
         "generated_at": datetime.now(UTC).isoformat(),
         "generated_by": "dataflow-agent",
+        "schema_version": workbook.metadata.get("Schema_Version") or SCHEMA_VERSION,
+        "template_version": workbook.metadata.get("Template_Version") or TEMPLATE_VERSION,
         "input_file": str(paths.workbook_path),
         "input_file_hash": file_sha256(paths.workbook_path),
         "node_count": len(graph.nodes),
@@ -54,7 +56,7 @@ def write_package_readme(paths: RuntimePaths, metadata: dict) -> None:
     lines = [
         "# 中文版本",
         "",
-        "# Dataflow Project 数据流图交付包工程白皮书",
+        "# Dataflow Project 数据流图交付包说明",
         "",
         "## 摘要",
         "",
@@ -68,6 +70,8 @@ def write_package_readme(paths: RuntimePaths, metadata: dict) -> None:
         "",
         f"- 环境：{metadata['environment']}",
         f"- 版本：{metadata['version']}",
+        f"- Schema 版本：{metadata['schema_version']}",
+        f"- Template 版本：{metadata['template_version']}",
         f"- 生成时间：{metadata['generated_at']}",
         f"- 输入文件哈希：`{metadata['input_file_hash']}`",
         "",
@@ -91,7 +95,7 @@ def write_package_readme(paths: RuntimePaths, metadata: dict) -> None:
         "",
         "# English Version",
         "",
-        "# Dataflow Project Data Flow Delivery Package Engineering White Paper",
+        "# Dataflow Project Data Flow Delivery Package Notes",
         "",
         "## Abstract",
         "",
@@ -105,6 +109,8 @@ def write_package_readme(paths: RuntimePaths, metadata: dict) -> None:
         "",
         f"- Environment: {metadata['environment']}",
         f"- Version: {metadata['version']}",
+        f"- Schema version: {metadata['schema_version']}",
+        f"- Template version: {metadata['template_version']}",
         f"- Generated at: {metadata['generated_at']}",
         f"- Input file hash: `{metadata['input_file_hash']}`",
         "",

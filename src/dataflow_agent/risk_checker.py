@@ -227,7 +227,7 @@ def _iam_findings(workbook: WorkbookData) -> list[Finding]:
 
 def _monitoring_findings(workbook: WorkbookData) -> list[Finding]:
     findings = []
-    covered_statuses = {"Covered", "Partial", "Partially_Covered"}
+    covered_statuses = {"Covered", "Partial"}
     monitored = {row.get("Object_ID", "") for row in active_rows(workbook, "10_Monitoring") if row.get("Coverage_Status") in covered_statuses}
     for row in active_rows(workbook, "04_Services"):
         if row.get("Service_Priority") == "P0" and row.get("Service_ID") not in monitored:

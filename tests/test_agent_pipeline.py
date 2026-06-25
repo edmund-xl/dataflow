@@ -29,6 +29,8 @@ from dataflow_agent.merge import merge_dcps
 ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_DCP = ROOT / "samples" / "DCP_v0.1"
 SAMPLE_WORKBOOK = SAMPLE_DCP / "dataflow_collection_template_v0.1.xlsx"
+CLEAN_SAMPLE_DCP = ROOT / "samples" / "DCP_clean_v0.1"
+CLEAN_SAMPLE_WORKBOOK = CLEAN_SAMPLE_DCP / "dataflow_collection_template_v0.1.xlsx"
 
 
 def _script_env() -> dict[str, str]:
@@ -40,7 +42,7 @@ def _script_env() -> dict[str, str]:
 
 
 def test_full_run_outputs_package(tmp_path: Path) -> None:
-    state = run_all(SAMPLE_DCP, tmp_path, "testnetv2", "v0.1-demo")
+    state = run_all(CLEAN_SAMPLE_DCP, tmp_path, "testnetv2", "v0.1-demo")
 
     package_dir = tmp_path / "dataflow_package_v0.1-demo"
     assert (tmp_path / "dataflow_package_v0.1-demo.zip").exists()
@@ -58,7 +60,21 @@ def test_full_run_outputs_package(tmp_path: Path) -> None:
     metadata = json.loads((package_dir / "metadata.json").read_text(encoding="utf-8"))
     assert metadata["environment"] == "testnetv2"
     assert metadata["version"] == "v0.1-demo"
+    assert metadata["schema_version"] == "workbook_schema.v0.1"
+    assert metadata["template_version"] == "dataflow_template.v1.0"
     assert metadata["input_file_hash"]
+
+
+def test_clean_sample_has_no_validation_or_risk_findings() -> None:
+    schema = load_schema()
+    workbook = normalize_workbook(read_workbook(CLEAN_SAMPLE_WORKBOOK, schema), schema)
+    validation = validate_workbook(workbook, schema)
+    graph = build_graph(workbook)
+    risks = check_risks(workbook, graph)
+
+    assert validation.findings == []
+    assert risks == []
+    assert graph.dropped_edges == []
 
 
 def test_sample_validates_and_builds_expected_edges() -> None:
@@ -198,11 +214,14 @@ def test_overview_renderer_uses_graph_truthful_edges(tmp_path: Path) -> None:
 
     overview_svg = (tmp_path / "00_overview.svg").read_text(encoding="utf-8")
     main_lines = re.findall(r'data-overview-role="main-dataflow"[^>]+', overview_svg)
+    main_labels = re.findall(r'data-overview-role="main-dataflow-label"[^>]+', overview_svg)
     rendered_edge_ids = {match.group(1) for line in main_lines if (match := re.search(r'data-edge-id="([^"]+)"', line))}
     rendered_edge_types = {match.group(1) for line in main_lines if (match := re.search(r'data-edge-type="([^"]+)"', line))}
 
     assert rendered_edge_ids == {"edge-2000", "edge-2001", "edge-2002", "edge-2003", "edge-2004", "edge-2005"}
+    assert len(main_labels) == len(main_lines)
     assert rendered_edge_types <= {"calls", "calls_external", "reads_from", "writes_to", "depends_on"}
+    assert not (rendered_edge_types & {"runs_on", "runs_on_runtime", "allowed_by", "uses_sa", "monitored_by", "protected_by"})
     assert "edge-2006" not in rendered_edge_ids
     assert 'data-source="prod-lb-public" data-target="svc-nginx-entry"' not in overview_svg
     assert 'data-overview-role="runtime-context"' in overview_svg
@@ -436,31 +455,32 @@ def test_merge_conflict_count_decreases_after_source_fix(tmp_path: Path) -> None
 
 
 def test_script_check_dcp_runs_with_defaults(tmp_path: Path) -> None:
-    subprocess.run(["scripts/check_dcp.sh", "samples/DCP_v0.1"], cwd=ROOT, check=True, env=_script_env())
+    subprocess.run(["scripts/check_dcp.sh", "samples/DCP_clean_v0.1"], cwd=ROOT, check=True, env=_script_env())
 
-    check_dir = SAMPLE_DCP / "agent_check"
+    check_dir = CLEAN_SAMPLE_DCP / "agent_check"
     assert (check_dir / "check_summary.md").exists()
     assert (check_dir / "fix_list.md").exists()
+    assert "自检状态：`PASS`" in (check_dir / "check_summary.md").read_text(encoding="utf-8")
 
     custom_check = tmp_path / "agent_check"
-    subprocess.run(["scripts/check_dcp.sh", "samples/DCP_v0.1", "--output", str(custom_check)], cwd=ROOT, check=True, env=_script_env())
+    subprocess.run(["scripts/check_dcp.sh", "samples/DCP_clean_v0.1", "--output", str(custom_check)], cwd=ROOT, check=True, env=_script_env())
     assert (custom_check / "check_summary.md").exists()
     assert (custom_check / "fix_list.md").exists()
 
 
 def test_script_build_package_runs_with_defaults(tmp_path: Path) -> None:
-    subprocess.run(["scripts/build_dataflow_package.sh", "samples/DCP_v0.1"], cwd=ROOT, check=True, env=_script_env())
+    subprocess.run(["scripts/build_dataflow_package.sh", "samples/DCP_clean_v0.1"], cwd=ROOT, check=True, env=_script_env())
 
-    dist_dir = SAMPLE_DCP / "dist"
+    dist_dir = CLEAN_SAMPLE_DCP / "dist"
     assert any(path.name.startswith("dataflow_package_") and path.suffix == ".zip" for path in dist_dir.iterdir())
 
     custom_dist = tmp_path / "dist"
-    subprocess.run(["scripts/build_dataflow_package.sh", "samples/DCP_v0.1", "--output", str(custom_dist)], cwd=ROOT, check=True, env=_script_env())
+    subprocess.run(["scripts/build_dataflow_package.sh", "samples/DCP_clean_v0.1", "--output", str(custom_dist)], cwd=ROOT, check=True, env=_script_env())
     assert any(path.name.startswith("dataflow_package_") and path.suffix == ".zip" for path in custom_dist.iterdir())
 
 
 def test_script_merge_dcp_runs_with_defaults(tmp_path: Path) -> None:
-    subprocess.run(["scripts/merge_dcp.sh", "samples/DCP_v0.1", "samples/DCP_v0.1"], cwd=ROOT, check=True, env=_script_env())
+    subprocess.run(["scripts/merge_dcp.sh", "samples/DCP_clean_v0.1", "samples/DCP_clean_v0.1"], cwd=ROOT, check=True, env=_script_env())
 
     merge_reports = list((ROOT / "dist").glob("merged_dcp_*/merge_report.xlsx"))
     package_zips = list((ROOT / "dist").glob("dataflow_package_*.zip"))
@@ -468,16 +488,16 @@ def test_script_merge_dcp_runs_with_defaults(tmp_path: Path) -> None:
     assert package_zips
 
     custom_merge = tmp_path / "merge"
-    subprocess.run(["scripts/merge_dcp.sh", "samples/DCP_v0.1", "samples/DCP_v0.1", "--output", str(custom_merge)], cwd=ROOT, check=True, env=_script_env())
+    subprocess.run(["scripts/merge_dcp.sh", "samples/DCP_clean_v0.1", "samples/DCP_clean_v0.1", "--output", str(custom_merge)], cwd=ROOT, check=True, env=_script_env())
     assert list(custom_merge.glob("merged_dcp_*/merge_report.xlsx"))
     assert list(custom_merge.glob("dataflow_package_*.zip"))
 
 
 def test_script_service_drilldown_runs_with_defaults() -> None:
-    subprocess.run(["scripts/build_service_drilldown.sh", "samples/DCP_v0.1", "svc-rpc-api"], cwd=ROOT, check=True, env=_script_env())
-    subprocess.run(["scripts/build_service_drilldown.sh", "samples/DCP_v0.1", "svc-rpc-api", "--depth", "2", "--direction", "downstream", "--theme", "dark", "--risk-focus"], cwd=ROOT, check=True, env=_script_env())
+    subprocess.run(["scripts/build_service_drilldown.sh", "samples/DCP_clean_v0.1", "svc-rpc-api"], cwd=ROOT, check=True, env=_script_env())
+    subprocess.run(["scripts/build_service_drilldown.sh", "samples/DCP_clean_v0.1", "svc-rpc-api", "--depth", "2", "--direction", "downstream", "--theme", "dark", "--risk-focus"], cwd=ROOT, check=True, env=_script_env())
 
-    output_dir = SAMPLE_DCP / "dist" / "service_drilldown_svc-rpc-api"
+    output_dir = CLEAN_SAMPLE_DCP / "dist" / "service_drilldown_svc-rpc-api"
     assert (output_dir / "service_drilldown_svc-rpc-api.svg").exists()
     assert (output_dir / "service_drilldown_svc-rpc-api.png").exists()
     assert (output_dir / "service_drilldown_svc-rpc-api.pdf").exists()
@@ -491,15 +511,17 @@ def test_service_port_query_runs_with_defaults(tmp_path: Path) -> None:
     assert "8545" in index["listen_ports"]
     assert index["outbound_dependencies"]
 
-    subprocess.run(["scripts/query_service_ports.sh", "samples/DCP_v0.1", "svc-rpc-api"], cwd=ROOT, check=True, env=_script_env())
-    output_file = SAMPLE_DCP / "dist" / "service_ports_svc-rpc-api.json"
+    subprocess.run(["scripts/query_service_ports.sh", "samples/DCP_clean_v0.1", "svc-rpc-api"], cwd=ROOT, check=True, env=_script_env())
+    output_file = CLEAN_SAMPLE_DCP / "dist" / "service_ports_svc-rpc-api.json"
     assert output_file.exists()
     output = json.loads(output_file.read_text(encoding="utf-8"))
     assert output["service_id"] == "svc-rpc-api"
+    assert output["source_row_id"] == "SVC-002"
+    assert output["outbound_dependencies"][0]["graph_edges"][0]["edge_id"]
 
     custom_output = tmp_path / "custom_service_ports.json"
     subprocess.run(
-        ["scripts/query_service_ports.sh", "samples/DCP_v0.1", "svc-rpc-api", "--output", str(custom_output)],
+        ["scripts/query_service_ports.sh", "samples/DCP_clean_v0.1", "svc-rpc-api", "--output", str(custom_output)],
         cwd=ROOT,
         check=True,
         env=_script_env(),
@@ -509,7 +531,7 @@ def test_service_port_query_runs_with_defaults(tmp_path: Path) -> None:
 
 
 def test_doctor_script_checks_environment() -> None:
-    result = subprocess.run(["scripts/doctor.sh", "samples/DCP_v0.1"], cwd=ROOT, check=True, env=_script_env(), text=True, capture_output=True)
+    result = subprocess.run(["scripts/doctor.sh", "samples/DCP_clean_v0.1"], cwd=ROOT, check=True, env=_script_env(), text=True, capture_output=True)
 
     assert "Dataflow Agent Doctor" in result.stdout
     assert "READY" in result.stdout
@@ -526,6 +548,7 @@ def test_scripts_do_not_embed_personal_python_paths() -> None:
         ROOT / "scripts" / "merge_dcp.sh",
         ROOT / "scripts" / "build_service_drilldown.sh",
         ROOT / "scripts" / "query_service_ports.sh",
+        ROOT / "scripts" / "setup_env.sh",
     ]:
         text = path.read_text(encoding="utf-8")
         assert "DATAFLOW_PYTHON" in text
@@ -585,12 +608,12 @@ def test_github_actions_ci_covers_core_flow() -> None:
 
     assert "python -m pytest -q" in workflow
     assert "scripts/scan_sensitive.sh" in workflow
-    assert "scripts/doctor.sh samples/DCP_v0.1" in workflow
-    assert "dataflow-agent check samples/DCP_v0.1" in workflow
-    assert "dataflow-agent quick-build samples/DCP_v0.1" in workflow
-    assert "dataflow-agent merge samples/DCP_v0.1 samples/DCP_v0.1" in workflow
-    assert "dataflow-agent drilldown --input samples/DCP_v0.1 --service-id svc-rpc-api" in workflow
-    assert "dataflow-agent query-port --input samples/DCP_v0.1 --service-id svc-rpc-api" in workflow
+    assert "scripts/doctor.sh samples/DCP_clean_v0.1" in workflow
+    assert "dataflow-agent check samples/DCP_clean_v0.1" in workflow
+    assert "dataflow-agent quick-build samples/DCP_clean_v0.1" in workflow
+    assert "dataflow-agent merge samples/DCP_clean_v0.1 samples/DCP_clean_v0.1" in workflow
+    assert "dataflow-agent drilldown --input samples/DCP_clean_v0.1 --service-id svc-rpc-api" in workflow
+    assert "dataflow-agent query-port --input samples/DCP_clean_v0.1 --service-id svc-rpc-api" in workflow
     assert "actions/upload-artifact@v4" in workflow
 
 
@@ -623,6 +646,10 @@ def test_devops_docs_and_deterministic_agent_boundary_are_documented() -> None:
 
     assert "DevOps" in collection_guide
     assert "docs/devops_dcp_collection_manual.md" in readme
+    assert "scripts/setup_env.sh" in readme
+    assert "workbook_schema.v0.1" in readme
+    assert "dataflow_template.v1.0" in readme
+    assert "samples/DCP_clean_v0.1/" in readme
     assert "docs/devops_dcp_collection_manual.md" in collection_guide
     for step in range(12):
         assert f"Step {step}" in manual
@@ -637,7 +664,7 @@ def test_devops_docs_and_deterministic_agent_boundary_are_documented() -> None:
         "Target_Type",
         "Interaction_Mode",
         "templates/dataflow_v1.0/",
-        "samples/DCP_v0.1/",
+        "samples/DCP_clean_v0.1/",
         "docs/dataflow_agent_input_contract_v0.1.md",
         "schemas/workbook_schema.json",
     ]:
@@ -672,6 +699,8 @@ def test_changelog_tracks_current_and_historical_changes() -> None:
         "DevOps DCP Collection Manual",
         "query_service_ports.sh",
         "doctor.sh",
+        "setup_env.sh",
+        "DCP_clean_v0.1",
         "9dadfab",
         "f064829",
     ]:
@@ -721,11 +750,12 @@ def test_license_and_generic_naming_are_enforced() -> None:
         assert legacy not in path.name.lower()
         assert legacy not in path.read_text(encoding="utf-8").lower()
 
-    with ZipFile(SAMPLE_WORKBOOK) as workbook:
-        for name in workbook.namelist():
-            if name.endswith((".xml", ".rels")):
-                data = workbook.read(name).decode("utf-8", errors="ignore").lower()
-                assert legacy not in data
+    for workbook_path in [SAMPLE_WORKBOOK, CLEAN_SAMPLE_WORKBOOK]:
+        with ZipFile(workbook_path) as workbook:
+            for name in workbook.namelist():
+                if name.endswith((".xml", ".rels")):
+                    data = workbook.read(name).decode("utf-8", errors="ignore").lower()
+                    assert legacy not in data
 
 
 def test_template_package_has_no_legacy_project_name() -> None:

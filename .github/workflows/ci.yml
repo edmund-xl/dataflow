@@ -28,25 +28,25 @@ jobs:
         run: scripts/scan_sensitive.sh
 
       - name: Run environment doctor
-        run: scripts/doctor.sh samples/DCP_v0.1
+        run: scripts/doctor.sh samples/DCP_clean_v0.1
 
       - name: Run tests
         run: python -m pytest -q
 
-      - name: Run sample self-check
-        run: dataflow-agent check samples/DCP_v0.1 --output ci_artifacts/check
+      - name: Run clean sample self-check
+        run: dataflow-agent check samples/DCP_clean_v0.1 --output ci_artifacts/check
 
-      - name: Run sample package build
-        run: dataflow-agent quick-build samples/DCP_v0.1 --output ci_artifacts/build
+      - name: Run clean sample package build
+        run: dataflow-agent quick-build samples/DCP_clean_v0.1 --output ci_artifacts/build
 
-      - name: Run sample merge
-        run: dataflow-agent merge samples/DCP_v0.1 samples/DCP_v0.1 --output ci_artifacts/merge
+      - name: Run clean sample merge
+        run: dataflow-agent merge samples/DCP_clean_v0.1 samples/DCP_clean_v0.1 --output ci_artifacts/merge
 
-      - name: Run sample service drilldown
-        run: dataflow-agent drilldown --input samples/DCP_v0.1 --service-id svc-rpc-api --output ci_artifacts/drilldown
+      - name: Run clean sample service drilldown
+        run: dataflow-agent drilldown --input samples/DCP_clean_v0.1 --service-id svc-rpc-api --output ci_artifacts/drilldown
 
-      - name: Run sample service port query
-        run: dataflow-agent query-port --input samples/DCP_v0.1 --service-id svc-rpc-api --output ci_artifacts/service_ports_svc-rpc-api.json
+      - name: Run clean sample service port query
+        run: dataflow-agent query-port --input samples/DCP_clean_v0.1 --service-id svc-rpc-api --output ci_artifacts/service_ports_svc-rpc-api.json
 
       - name: Verify generated package files
         run: |

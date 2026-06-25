@@ -43,7 +43,7 @@ DCP_v0.1/
 
 ```text
 templates/dataflow_v1.0/
-samples/DCP_v0.1/
+samples/DCP_clean_v0.1/
 ```
 
 主工作簿名应为：
@@ -411,7 +411,7 @@ DCP_v0.1/
 | 用途 | 路径 |
 |---|---|
 | 标准模板资料 | `templates/dataflow_v1.0/` |
-| 可运行样例 | `samples/DCP_v0.1/` |
+| 可运行干净样例 | `samples/DCP_clean_v0.1/` |
 | 输入契约 | `docs/dataflow_agent_input_contract_v0.1.md` |
 | 自检说明 | `docs/dcp_self_check_guide.md` |
 | 字段规则 | `schemas/workbook_schema.json` |
@@ -463,7 +463,7 @@ Use the repository template and sample as references:
 
 ```text
 templates/dataflow_v1.0/
-samples/DCP_v0.1/
+samples/DCP_clean_v0.1/
 ```
 
 The main workbook file name should be:
@@ -831,7 +831,7 @@ DCP_v0.1/
 | Purpose | Path |
 |---|---|
 | Standard template package | `templates/dataflow_v1.0/` |
-| Runnable sample | `samples/DCP_v0.1/` |
+| Clean runnable sample | `samples/DCP_clean_v0.1/` |
 | Input contract | `docs/dataflow_agent_input_contract_v0.1.md` |
 | Self-check guide | `docs/dcp_self_check_guide.md` |
 | Field rules | `schemas/workbook_schema.json` |

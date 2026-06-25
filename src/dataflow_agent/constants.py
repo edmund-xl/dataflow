@@ -33,6 +33,8 @@ CONFIRMED_STATUSES = {"Confirmed", "Auto_Detected", "Pending_Confirmation", "Acc
 EXCLUDED_STATUSES = {"Rejected", "Not_Applicable"}
 
 OUTPUT_PACKAGE_PREFIX = "dataflow_package"
+SCHEMA_VERSION = "workbook_schema.v0.1"
+TEMPLATE_VERSION = "dataflow_template.v1.0"
 
 
 @dataclass(frozen=True)

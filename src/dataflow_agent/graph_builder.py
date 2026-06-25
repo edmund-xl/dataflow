@@ -246,7 +246,7 @@ def _monitoring_edges(graph: GraphModel, workbook: WorkbookData) -> None:
     edge_no = count(4000)
     for row in active_rows(workbook, "10_Monitoring"):
         if row.get("Object_ID"):
-            graph.add_edge(_edge(edge_no, "monitored_by", row["Object_ID"], row["Monitoring_ID"], row.get("Coverage_Status", ""), row))
+            graph.add_edge(_edge(edge_no, "monitored_by", _monitoring_source_id(graph, row), row["Monitoring_ID"], row.get("Coverage_Status", ""), row))
 
 
 def _cicd_edges(graph: GraphModel, workbook: WorkbookData) -> None:
@@ -339,6 +339,15 @@ def _runtime_node_id(row: Row) -> str:
     if not (row.get("Runtime_Type") or row.get("Runtime_ID")):
         return ""
     return row.get("Runtime_ID") or f"runtime:{safe_id(row.get('Service_ID', ''))}"
+
+
+def _monitoring_source_id(graph: GraphModel, row: Row) -> str:
+    object_id = row.get("Object_ID", "")
+    if row.get("Object_Type", "").lower() == "dependency":
+        dependency_node = f"dependency:{object_id}"
+        if dependency_node in graph.nodes:
+            return dependency_node
+    return object_id
 
 
 def _explicit_dependency_target(row: Row) -> tuple[str, str] | None:

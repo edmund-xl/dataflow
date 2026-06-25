@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .constants import find_workbook
 from .defaults import default_build_output, default_check_output, default_merge_output, infer_env_version
+from .graph_builder import build_graph
 from .merge import merge_dcps
 from .normalizer import normalize_workbook
 from .pipeline import (
@@ -149,7 +150,8 @@ def main(argv: list[str] | None = None) -> int:
         output_path = Path(args.output).resolve() if args.output else default_build_output(input_dir) / f"service_ports_{args.service_id}.json"
         schema = load_schema()
         workbook = normalize_workbook(read_workbook(find_workbook(input_dir), schema), schema)
-        index = write_service_port_index(workbook, args.service_id, output_path)
+        graph = build_graph(workbook)
+        index = write_service_port_index(workbook, args.service_id, output_path, graph)
         print(f"Service port index: {output_path}")
         print(f"Listen ports: {', '.join(index['listen_ports']) if index['listen_ports'] else 'N/A'}")
         print(f"Inbound dependencies: {len(index['inbound_dependencies'])}")

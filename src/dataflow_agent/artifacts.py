@@ -37,7 +37,7 @@ def write_graph_artifacts(graph: GraphModel, normalized_dir: Path) -> None:
 def write_normalized_snapshot(workbook: WorkbookData, normalized_dir: Path) -> None:
     normalized_dir.mkdir(parents=True, exist_ok=True)
     write_json(normalized_dir / "normalized_data.json", workbook.sheets)
-    workbook_path = normalized_dir / "mainnet_dataflow_normalized.xlsx"
+    workbook_path = normalized_dir / "dataflow_normalized.xlsx"
     wb = Workbook()
     default = wb.active
     wb.remove(default)

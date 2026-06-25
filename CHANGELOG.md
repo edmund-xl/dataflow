@@ -9,6 +9,8 @@
 ### Added
 
 - 新增 `scripts/doctor.sh`，用于首次使用或换机器后的环境自检，输出 `READY / WARN / MISSING`。
+- 新增 `scripts/setup_env.sh`，用于创建本地 `.venv` 并安装开发/运行依赖。
+- 新增 `samples/DCP_clean_v0.1/` 干净通过样例，保留 `samples/DCP_v0.1/` 作为风险演示样例。
 - 样例 DCP 工作簿补齐 runtime 字段和显式依赖目标字段，便于直接填写 `Runtime_Type`、`Runtime_ID`、`Runtime_Name`、`Runtime_Namespace`、`Runtime_Cluster`、`Runtime_Region`、`Target_Type`、`Target_ID` 和 `Interaction_Mode`。
 
 ### Changed
@@ -17,6 +19,14 @@
 - 通用 v1.0 模板资料包同步补齐 runtime / target / interaction 字段、数据字典说明和嵌套模板包内容。
 - README、DCP 自检说明、交付包生成说明和 DevOps manual 增加环境自检与脚本自定义输出示例。
 - Overview 数据流图改为 graph-truthful 专业布局：主线只展示真实数据流 edge，runtime / Firewall / IAM / Monitoring 改为上下文 chip、摘要卡和 ledger，避免补画不存在的数据流。
+- 自检摘要和修复清单改为操作型输出，先展示提交判断、关键指标和按严重度 / Sheet 分组的修复项。
+- `query-port` JSON 输出增加 source row、Evidence_ID 和 graph edge 追踪信息。
+- `metadata.json` 增加 `schema_version` 和 `template_version`，README 增加 schema / template 兼容关系。
+- Overview renderer 拆分为独立模块，降低后续图形优化的维护风险。
+
+### Fixed
+
+- 修复 dependency 级监控关系在 graph builder 中可能形成 dropped edge 的问题。
 
 ## 0.1.0 - 2026-06-24
 
@@ -110,6 +120,8 @@ This file records user-visible changes to Dataflow Agent. The repository does no
 ### Added
 
 - Added `scripts/doctor.sh` for first-use or new-machine environment checks with `READY / WARN / MISSING` output.
+- Added `scripts/setup_env.sh` for creating a local `.venv` and installing runtime/development dependencies.
+- Added `samples/DCP_clean_v0.1/` as a clean passing sample while keeping `samples/DCP_v0.1/` as a risk-demo sample.
 - Added runtime fields and explicit dependency target fields to the sample DCP workbook, so users can directly fill `Runtime_Type`, `Runtime_ID`, `Runtime_Name`, `Runtime_Namespace`, `Runtime_Cluster`, `Runtime_Region`, `Target_Type`, `Target_ID`, and `Interaction_Mode`.
 
 ### Changed
@@ -118,6 +130,14 @@ This file records user-visible changes to Dataflow Agent. The repository does no
 - Synchronized the generic v1.0 template package with runtime / target / interaction fields, data dictionary notes, and the nested template bundle.
 - Updated README, DCP self-check guide, package generation guide, and DevOps manual with the environment doctor and custom output examples.
 - Changed the overview data-flow diagram to a graph-truthful professional layout: the main lane renders only real dataflow edges, while runtime / Firewall / IAM / Monitoring are shown as context chips, summary cards, and a ledger instead of inferred flow lines.
+- Changed check summaries and fix lists to operational outputs with submission decisions, key metrics, and severity / sheet grouped findings first.
+- Added source row, Evidence_ID, and graph edge traceability to `query-port` JSON output.
+- Added `schema_version` and `template_version` to `metadata.json`; README now documents schema / template compatibility.
+- Split the overview renderer into its own module to reduce diagram-renderer maintenance risk.
+
+### Fixed
+
+- Fixed dependency-level monitoring relationships that could otherwise create dropped graph edges.
 
 ## 0.1.0 - 2026-06-24
 
