@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -178,13 +179,37 @@ def test_all_diagram_views_render_nonempty_files(tmp_path: Path) -> None:
     overview_svg = (tmp_path / "00_overview.svg").read_text(encoding="utf-8")
     security_svg = (tmp_path / "05_security_monitoring_layer.svg").read_text(encoding="utf-8")
     legacy = "mega" + "eth"
-    assert "Structurizr/C4-style architecture view" in overview_svg
+    assert "Graph-truthful architecture view" in overview_svg
     assert "Legend" in overview_svg
+    assert "Graph edge ledger" in overview_svg
     assert "Subnet" not in overview_svg
     assert "Security Review Focus" in security_svg
     assert "#101827" in security_svg
     assert legacy not in overview_svg.lower()
     assert legacy not in security_svg.lower()
+
+
+def test_overview_renderer_uses_graph_truthful_edges(tmp_path: Path) -> None:
+    schema = load_schema()
+    workbook = normalize_workbook(read_workbook(SAMPLE_WORKBOOK, schema), schema)
+    graph = build_graph(workbook)
+
+    render_diagrams(graph, tmp_path)
+
+    overview_svg = (tmp_path / "00_overview.svg").read_text(encoding="utf-8")
+    main_lines = re.findall(r'data-overview-role="main-dataflow"[^>]+', overview_svg)
+    rendered_edge_ids = {match.group(1) for line in main_lines if (match := re.search(r'data-edge-id="([^"]+)"', line))}
+    rendered_edge_types = {match.group(1) for line in main_lines if (match := re.search(r'data-edge-type="([^"]+)"', line))}
+
+    assert rendered_edge_ids == {"edge-2000", "edge-2001", "edge-2002", "edge-2003", "edge-2004", "edge-2005"}
+    assert rendered_edge_types <= {"calls", "calls_external", "reads_from", "writes_to", "depends_on"}
+    assert "edge-2006" not in rendered_edge_ids
+    assert 'data-source="prod-lb-public" data-target="svc-nginx-entry"' not in overview_svg
+    assert 'data-overview-role="runtime-context"' in overview_svg
+    assert 'data-overview-role="control-badge"' in overview_svg
+    assert 'data-edge-type="allowed_by"' in overview_svg
+    assert 'data-edge-type="uses_sa"' in overview_svg
+    assert "DEP-004; EXT-001" in overview_svg
 
 
 def test_diagrams_show_non_final_statuses(tmp_path: Path) -> None:

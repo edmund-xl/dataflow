@@ -16,6 +16,7 @@
 - `scripts/check_dcp.sh` 和 `scripts/build_dataflow_package.sh` 支持透传 `--env`、`--version`、`--output` 等底层 CLI 参数。
 - 通用 v1.0 模板资料包同步补齐 runtime / target / interaction 字段、数据字典说明和嵌套模板包内容。
 - README、DCP 自检说明、交付包生成说明和 DevOps manual 增加环境自检与脚本自定义输出示例。
+- Overview 数据流图改为 graph-truthful 专业布局：主线只展示真实数据流 edge，runtime / Firewall / IAM / Monitoring 改为上下文 chip、摘要卡和 ledger，避免补画不存在的数据流。
 
 ## 0.1.0 - 2026-06-24
 
@@ -116,6 +117,7 @@ This file records user-visible changes to Dataflow Agent. The repository does no
 - `scripts/check_dcp.sh` and `scripts/build_dataflow_package.sh` now forward lower-level CLI options such as `--env`, `--version`, and `--output`.
 - Synchronized the generic v1.0 template package with runtime / target / interaction fields, data dictionary notes, and the nested template bundle.
 - Updated README, DCP self-check guide, package generation guide, and DevOps manual with the environment doctor and custom output examples.
+- Changed the overview data-flow diagram to a graph-truthful professional layout: the main lane renders only real dataflow edges, while runtime / Firewall / IAM / Monitoring are shown as context chips, summary cards, and a ledger instead of inferred flow lines.
 
 ## 0.1.0 - 2026-06-24
 
