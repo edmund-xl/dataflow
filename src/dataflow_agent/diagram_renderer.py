@@ -149,11 +149,6 @@ def render_diagrams(graph: GraphModel, diagrams_dir: Path) -> list[Path]:
             outputs.append(_write_service_dependency_svg(diagrams_dir / f"{view.filename}.svg", view, nodes, edges, positions))
             outputs.append(_write_service_dependency_png(diagrams_dir / f"{view.filename}.png", view, nodes, edges, positions))
             outputs.append(_write_service_dependency_pdf(diagrams_dir / f"{view.filename}.pdf", view, nodes, edges, positions))
-        elif view.filename == "05_security_monitoring_layer":
-            positions = _layout(nodes)
-            outputs.append(_write_security_relationship_svg(diagrams_dir / f"{view.filename}.svg", view, nodes, edges))
-            outputs.append(_write_security_relationship_png(diagrams_dir / f"{view.filename}.png", view, nodes, edges))
-            outputs.append(_write_security_relationship_pdf(diagrams_dir / f"{view.filename}.pdf", view, nodes, edges))
         else:
             positions = _layout(nodes)
             outputs.append(_write_svg(diagrams_dir / f"{view.filename}.svg", view, nodes, edges, positions))

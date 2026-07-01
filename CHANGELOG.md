@@ -27,6 +27,7 @@
 - 服务依赖图改为主数据流编号视图：图上线条只显示编号，右侧 `Edge ledger` 展示来源记录、关系类型、端口和源/目标对象，降低线条标签重叠。
 - 总览图同步改为主数据流编号视图，安全与监控图改为逐行关系视图，避免控制类关系大量交叉堆叠。
 - 主数据流编号渲染改为先画线、再画节点、最后画编号，并将编号锚定到水平线段上，避免数字被线条覆盖。
+- 安全与监控图恢复为原始深色审计风格；编号拓扑仅保留在总览图和服务依赖图。
 
 ### Fixed
 
@@ -142,6 +143,7 @@ This file records user-visible changes to Dataflow Agent. The repository does no
 - Changed the service dependency layer to a numbered main-dataflow view: lines show only edge numbers, while the right-side `Edge ledger` records source rows, relationship types, ports, and source/target objects to reduce label overlap.
 - Changed the overview layer to the same numbered main-dataflow view and changed the security / monitoring layer to a row-based relationship view to avoid dense crossing control relationships.
 - Changed numbered main-dataflow rendering to draw lines first, nodes second, and edge-number badges last, with badges anchored to horizontal edge segments so numbers are not covered by lines.
+- Restored the security and monitoring layer to the original dark audit style; numbered topology is kept only for the overview and service dependency diagrams.
 
 ### Fixed
 
