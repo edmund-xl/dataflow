@@ -238,6 +238,7 @@ def test_all_diagram_views_render_nonempty_files(tmp_path: Path) -> None:
         assert 'data-overview-role="main-dataflow-halo"' in svg
         assert 'data-overview-role="main-dataflow"' in svg
         assert 'data-edge-number="E' in svg
+        assert 'data-overview-role="line-bridge-gap"' not in svg
     assert "Subnet" not in overview_svg
     assert 'data-edge-type="allowed_by"' not in _main_dataflow_lines(service_svg)
     assert 'data-edge-type="uses_runtime"' not in _main_dataflow_lines(service_svg)

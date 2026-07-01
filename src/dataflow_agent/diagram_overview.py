@@ -364,9 +364,6 @@ def _append_overview_svg_bridges(lines: list[str], layout: OverviewLayout) -> No
         x = bridge.x
         y = bridge.y
         lines.append(
-            f'<line x1="{x - radius:.1f}" y1="{y:.1f}" x2="{x + radius:.1f}" y2="{y:.1f}" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" data-overview-role="line-bridge-gap" data-edge-id="{xml_escape(bridge.edge_id)}"/>'
-        )
-        lines.append(
             f'<path d="M{x - radius:.1f},{y:.1f} Q{x:.1f},{y - rise:.1f} {x + radius:.1f},{y:.1f}" fill="none" stroke="{bridge.color}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" data-overview-role="line-bridge" data-edge-id="{xml_escape(bridge.edge_id)}"/>'
         )
     lines.append("</g>")
@@ -720,12 +717,17 @@ def _overview_terminal_bus_y(
     source_y = source[1]
     target_y = target[1]
     side = _overview_terminal_side(edge, layout)
-    top_base = layout.main_top + 72
-    bottom_base = layout.controls_top - 72
+    node_top = min((y for _, y in layout.positions.values()), default=layout.main_top + 110)
+    node_bottom = max((y + OVERVIEW_NODE_HEIGHT for _, y in layout.positions.values()), default=layout.controls_top - 120)
+    top_limit = layout.main_top + 28
+    bottom_limit = layout.controls_top - 26
+    top_base = max(top_limit, node_top - 16)
+    bottom_base = min(bottom_limit, node_bottom + 28)
+    spacing = 32
     if side == "top":
-        return top_base + lane * 24
+        return max(top_limit, top_base - lane * spacing)
     if side == "bottom":
-        return bottom_base - lane * 24
+        return min(bottom_limit, bottom_base + lane * spacing)
     fallback = max(source_y, target_y) + OVERVIEW_NODE_HEIGHT + 38 + lane * 16
     return max(top_base, min(bottom_base, fallback))
 
@@ -963,7 +965,6 @@ def _draw_overview_png_bridges(draw: ImageDraw.ImageDraw, layout: OverviewLayout
         y = bridge.y
         radius = 9
         rise = 7
-        draw.line((x - radius, y, x + radius, y), fill="#FFFFFF", width=10)
         points = [
             (x - radius, y),
             (x - radius / 2, y - rise * 0.75),
