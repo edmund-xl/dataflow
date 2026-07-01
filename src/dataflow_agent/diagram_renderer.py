@@ -142,18 +142,18 @@ def render_diagrams(graph: GraphModel, diagrams_dir: Path) -> list[Path]:
     diagrams_dir.mkdir(parents=True, exist_ok=True)
     outputs: list[Path] = []
     for view in VIEWS:
-        if view.filename == "00_overview":
-            from .diagram_overview import render_overview_outputs
-
-            outputs.extend(render_overview_outputs(graph, diagrams_dir, view))
-            continue
         nodes, edges = _select_view(graph, view)
-        if view.filename == "03_service_dependency_layer":
+        if view.filename in {"00_overview", "03_service_dependency_layer"}:
             nodes, edges = _select_service_dependency_main_flow(graph)
             positions = _service_dependency_layout(nodes, edges)
             outputs.append(_write_service_dependency_svg(diagrams_dir / f"{view.filename}.svg", view, nodes, edges, positions))
             outputs.append(_write_service_dependency_png(diagrams_dir / f"{view.filename}.png", view, nodes, edges, positions))
             outputs.append(_write_service_dependency_pdf(diagrams_dir / f"{view.filename}.pdf", view, nodes, edges, positions))
+        elif view.filename == "05_security_monitoring_layer":
+            positions = _layout(nodes)
+            outputs.append(_write_security_relationship_svg(diagrams_dir / f"{view.filename}.svg", view, nodes, edges))
+            outputs.append(_write_security_relationship_png(diagrams_dir / f"{view.filename}.png", view, nodes, edges))
+            outputs.append(_write_security_relationship_pdf(diagrams_dir / f"{view.filename}.pdf", view, nodes, edges))
         else:
             positions = _layout(nodes)
             outputs.append(_write_svg(diagrams_dir / f"{view.filename}.svg", view, nodes, edges, positions))
@@ -167,8 +167,8 @@ def render_diagrams(graph: GraphModel, diagrams_dir: Path) -> list[Path]:
                 nodes,
                 edges,
                 positions,
-                node_width=SERVICE_DEP_NODE_WIDTH if view.filename == "03_service_dependency_layer" else NODE_WIDTH,
-                node_height=SERVICE_DEP_NODE_HEIGHT if view.filename == "03_service_dependency_layer" else NODE_HEIGHT,
+                node_width=SERVICE_DEP_NODE_WIDTH if view.filename in {"00_overview", "03_service_dependency_layer"} else NODE_WIDTH,
+                node_height=SERVICE_DEP_NODE_HEIGHT if view.filename in {"00_overview", "03_service_dependency_layer"} else NODE_HEIGHT,
             )
         )
     return outputs
@@ -411,6 +411,7 @@ def _service_dependency_size(positions: dict[str, tuple[int, int]], edges: list[
 
 def _write_service_dependency_svg(path: Path, view: View, nodes: list[GraphNode], edges: list[GraphEdge], positions: dict[str, tuple[int, int]]) -> Path:
     width, height, ledger_x = _service_dependency_size(positions, edges)
+    routes = _service_dependency_routes(edges, positions)
     lines = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-label="{xml_escape(view.title)} main dataflow with edge ledger">',
         "<defs>",
@@ -424,36 +425,53 @@ def _write_service_dependency_svg(path: Path, view: View, nodes: list[GraphNode]
         f'<rect x="40" y="{HEADER_HEIGHT}" width="{ledger_x - 58}" height="{height - HEADER_HEIGHT - 42}" rx="18" fill="#FFFFFF" stroke="#CBD5E1"/>',
         f'<rect x="{ledger_x}" y="{HEADER_HEIGHT}" width="{SERVICE_DEP_LEDGER_WIDTH}" height="{height - HEADER_HEIGHT - 42}" rx="18" fill="#FFFFFF" stroke="#CBD5E1"/>',
     ]
-    _append_service_dependency_svg_edges(lines, edges, positions)
+    _append_service_dependency_svg_edges(lines, edges, routes)
     for node in nodes:
         x, y = positions.get(node.id, (LEFT_MARGIN, HEADER_HEIGHT + 92))
         _append_service_dependency_svg_node(lines, node, x, y)
+    _append_service_dependency_svg_badges(lines, edges, routes)
     _append_service_dependency_svg_ledger(lines, edges, ledger_x)
     lines.append("</svg>")
     path.write_text("\n".join(lines), encoding="utf-8")
     return path
 
 
-def _append_service_dependency_svg_edges(lines: list[str], edges: list[GraphEdge], positions: dict[str, tuple[int, int]]) -> None:
+def _append_service_dependency_svg_edges(lines: list[str], edges: list[GraphEdge], routes: dict[str, list[tuple[float, float]]]) -> None:
     for idx, edge in enumerate(edges, 1):
-        if edge.source not in positions or edge.target not in positions:
+        points = routes.get(edge.id)
+        if not points:
             continue
-        points = _service_dependency_edge_points(edge, positions, idx)
         color = _service_dependency_edge_color(edge)
         point_text = " ".join(f"{x:.1f},{y:.1f}" for x, y in points)
         lines.append(f'<polyline points="{point_text}" fill="none" stroke="{color}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#svcArrow)" data-edge-id="{xml_escape(edge.id)}" data-edge-number="{idx}" data-edge-type="{xml_escape(edge.type)}" data-source="{xml_escape(edge.source)}" data-target="{xml_escape(edge.target)}"><title>{xml_escape(_service_dependency_edge_title(edge))}</title></polyline>')
+
+
+def _append_service_dependency_svg_badges(lines: list[str], edges: list[GraphEdge], routes: dict[str, list[tuple[float, float]]]) -> None:
+    for idx, edge in enumerate(edges, 1):
+        points = routes.get(edge.id)
+        if not points:
+            continue
+        color = _service_dependency_edge_color(edge)
         cx, cy = _service_dependency_badge_position(points, idx)
+        lines.append(f'<g data-edge-badge-id="{xml_escape(edge.id)}"><circle cx="{cx:.1f}" cy="{cy:.1f}" r="16" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="5"/>')
         lines.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="13" fill="{color}" stroke="#FFFFFF" stroke-width="2"/>')
-        lines.append(f'<text x="{cx:.1f}" y="{cy + 4:.1f}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">{idx}</text>')
+        lines.append(f'<text x="{cx:.1f}" y="{cy + 4:.1f}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">{idx}</text></g>')
 
 
 def _append_service_dependency_svg_node(lines: list[str], node: GraphNode, x: int, y: int) -> None:
     fill, stroke = _service_dependency_node_colors(node)
-    lines.append(f'<g filter="url(#svcShadow)" data-node-id="{xml_escape(node.id)}" role="img" aria-label="{xml_escape(_node_accessible_label(node))}"><title>{xml_escape(node.id)} | {xml_escape(node.type)}</title>')
+    risk_level = _node_risk_level(node)
+    lines.append(f'<g filter="url(#svcShadow)" data-node-id="{xml_escape(node.id)}" role="img" aria-label="{xml_escape(_node_accessible_label(node))}" data-risk-level="{risk_level}"><title>{xml_escape(node.id)} | {xml_escape(node.type)}</title>')
     lines.append(f'<rect x="{x}" y="{y}" width="{SERVICE_DEP_NODE_WIDTH}" height="{SERVICE_DEP_NODE_HEIGHT}" rx="10" fill="{fill}" stroke="{stroke}" stroke-width="2"/>')
     lines.append(f'<rect x="{x}" y="{y}" width="8" height="{SERVICE_DEP_NODE_HEIGHT}" rx="4" fill="{stroke}"/>')
     lines.append(f'<text x="{x + 20}" y="{y + 34}" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" fill="#111827">{xml_escape(_clip(node.label, 31))}</text>')
     lines.append(f'<text x="{x + 20}" y="{y + 62}" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#5B6573">{xml_escape(node.type)}</text>')
+    badge = _status_badge(_status_kind(node.status))
+    if badge:
+        badge_text, badge_bg, badge_fg = badge
+        badge_width = max(42, len(badge_text) * 7 + 18)
+        lines.append(f'<rect x="{x + SERVICE_DEP_NODE_WIDTH - badge_width - 14}" y="{y + 12}" width="{badge_width}" height="20" rx="10" fill="{badge_bg}" stroke="{stroke}" stroke-width="0.8"/>')
+        lines.append(f'<text x="{x + SERVICE_DEP_NODE_WIDTH - badge_width / 2 - 14:.1f}" y="{y + 26}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" fill="{badge_fg}">{badge_text}</text>')
     lines.append("</g>")
 
 
@@ -475,6 +493,7 @@ def _append_service_dependency_svg_ledger(lines: list[str], edges: list[GraphEdg
 
 def _write_service_dependency_png(path: Path, view: View, nodes: list[GraphNode], edges: list[GraphEdge], positions: dict[str, tuple[int, int]]) -> Path:
     width, height, ledger_x = _service_dependency_size(positions, edges)
+    routes = _service_dependency_routes(edges, positions)
     image = Image.new("RGB", (width, height), "#F5F7FB")
     draw = ImageDraw.Draw(image)
     title_font = _font(30, bold=True)
@@ -490,16 +509,12 @@ def _write_service_dependency_png(path: Path, view: View, nodes: list[GraphNode]
     draw.rounded_rectangle((40, HEADER_HEIGHT, ledger_x - 18, height - 42), radius=18, fill="#FFFFFF", outline="#CBD5E1")
     draw.rounded_rectangle((ledger_x, HEADER_HEIGHT, ledger_x + SERVICE_DEP_LEDGER_WIDTH, height - 42), radius=18, fill="#FFFFFF", outline="#CBD5E1")
     for idx, edge in enumerate(edges, 1):
-        if edge.source not in positions or edge.target not in positions:
+        points = routes.get(edge.id)
+        if not points:
             continue
-        points = _service_dependency_edge_points(edge, positions, idx)
         color = _service_dependency_edge_color(edge)
         _draw_polyline(draw, points, color, width=4, dashed=False)
         _draw_arrowhead(draw, points[-2], points[-1], color)
-        cx, cy = _service_dependency_badge_position(points, idx)
-        draw.ellipse((cx - 13, cy - 13, cx + 13, cy + 13), fill=color, outline="#FFFFFF", width=2)
-        number = str(idx)
-        draw.text((cx - _text_width(draw, number, small_font) / 2, cy - 7), number, fill="#FFFFFF", font=small_font)
     for node in nodes:
         x, y = positions.get(node.id, (LEFT_MARGIN, HEADER_HEIGHT + 92))
         fill, stroke = _service_dependency_node_colors(node)
@@ -508,6 +523,23 @@ def _write_service_dependency_png(path: Path, view: View, nodes: list[GraphNode]
         draw.rounded_rectangle((x, y, x + 8, y + SERVICE_DEP_NODE_HEIGHT), radius=4, fill=stroke)
         draw.text((x + 20, y + 20), _clip(node.label, 31), fill="#111827", font=node_font)
         draw.text((x + 20, y + 54), node.type, fill="#5B6573", font=node_meta_font)
+        badge = _status_badge(_status_kind(node.status))
+        if badge:
+            badge_text, badge_bg, badge_fg = badge
+            badge_width = max(42, len(badge_text) * 7 + 18)
+            box = (x + SERVICE_DEP_NODE_WIDTH - badge_width - 14, y + 12, x + SERVICE_DEP_NODE_WIDTH - 14, y + 32)
+            draw.rounded_rectangle(box, radius=10, fill=badge_bg, outline=stroke)
+            draw.text((box[0] + badge_width / 2 - _text_width(draw, badge_text, small_font) / 2, y + 15), badge_text, fill=badge_fg, font=small_font)
+    for idx, edge in enumerate(edges, 1):
+        points = routes.get(edge.id)
+        if not points:
+            continue
+        color = _service_dependency_edge_color(edge)
+        cx, cy = _service_dependency_badge_position(points, idx)
+        draw.ellipse((cx - 16, cy - 16, cx + 16, cy + 16), fill="#FFFFFF", outline="#FFFFFF", width=5)
+        draw.ellipse((cx - 13, cy - 13, cx + 13, cy + 13), fill=color, outline="#FFFFFF", width=2)
+        number = str(idx)
+        draw.text((cx - _text_width(draw, number, small_font) / 2, cy - 7), number, fill="#FFFFFF", font=small_font)
     draw.text((ledger_x + 30, HEADER_HEIGHT + 25), "Edge ledger", fill="#111827", font=ledger_title_font)
     draw.text((ledger_x + 30, HEADER_HEIGHT + 56), "Line numbers map to source workbook records.", fill="#5B6573", font=small_font)
     y = HEADER_HEIGHT + 94
@@ -535,27 +567,73 @@ def _write_service_dependency_pdf(path: Path, view: View, nodes: list[GraphNode]
     return path
 
 
-def _service_dependency_edge_points(edge: GraphEdge, positions: dict[str, tuple[int, int]], index: int) -> list[tuple[float, float]]:
-    source = positions[edge.source]
-    target = positions[edge.target]
-    sx = source[0] + SERVICE_DEP_NODE_WIDTH
-    sy = source[1] + SERVICE_DEP_NODE_HEIGHT / 2
-    tx = target[0]
-    ty = target[1] + SERVICE_DEP_NODE_HEIGHT / 2
-    if sx <= tx:
-        if abs(sy - ty) < 12:
-            return [(sx, sy), (tx, ty)]
-        lane_offset = ((index % 5) - 2) * 18
-        mid_x = (sx + tx) / 2 + lane_offset
-        return [(sx, sy), (mid_x, sy), (mid_x, ty), (tx, ty)]
-    gutter = max(sx, tx + SERVICE_DEP_NODE_WIDTH) + 72 + (index % 4) * 22
-    return [(sx, sy), (gutter, sy), (gutter, ty), (tx, ty)]
+def _service_dependency_routes(edges: list[GraphEdge], positions: dict[str, tuple[int, int]]) -> dict[str, list[tuple[float, float]]]:
+    outgoing: dict[str, list[GraphEdge]] = {}
+    incoming: dict[str, list[GraphEdge]] = {}
+    for edge in edges:
+        if edge.source not in positions or edge.target not in positions:
+            continue
+        outgoing.setdefault(edge.source, []).append(edge)
+        incoming.setdefault(edge.target, []).append(edge)
+    for grouped in (outgoing, incoming):
+        for node_edges in grouped.values():
+            node_edges.sort(key=lambda item: (_edge_record_id(item), item.target, item.source, item.id))
+
+    outgoing_port = _service_dependency_ports(outgoing, SERVICE_DEP_NODE_HEIGHT)
+    incoming_port = _service_dependency_ports(incoming, SERVICE_DEP_NODE_HEIGHT)
+    routes: dict[str, list[tuple[float, float]]] = {}
+    for index, edge in enumerate(edges, 1):
+        if edge.source not in positions or edge.target not in positions:
+            continue
+        source = positions[edge.source]
+        target = positions[edge.target]
+        sx = source[0] + SERVICE_DEP_NODE_WIDTH
+        sy = source[1] + outgoing_port.get(edge.id, SERVICE_DEP_NODE_HEIGHT / 2)
+        tx = target[0]
+        ty = target[1] + incoming_port.get(edge.id, SERVICE_DEP_NODE_HEIGHT / 2)
+        if sx <= tx:
+            distance = tx - sx
+            if abs(sy - ty) < 10:
+                routes[edge.id] = [(sx, sy), (tx, ty)]
+                continue
+            gutter_base = sx + min(max(44, distance * 0.22), 104)
+            lane = ((index - 1) % 5) * 12
+            mid_x = min(tx - 34, gutter_base + lane)
+            routes[edge.id] = [(sx, sy), (mid_x, sy), (mid_x, ty), (tx, ty)]
+            continue
+        gutter = max(sx, tx + SERVICE_DEP_NODE_WIDTH) + 72 + (index % 4) * 22
+        routes[edge.id] = [(sx, sy), (gutter, sy), (gutter, ty), (tx, ty)]
+    return routes
+
+
+def _service_dependency_ports(grouped_edges: dict[str, list[GraphEdge]], node_height: int) -> dict[str, float]:
+    ports: dict[str, float] = {}
+    for node_edges in grouped_edges.values():
+        count = len(node_edges)
+        if count == 1:
+            ports[node_edges[0].id] = node_height / 2
+            continue
+        top = 24.0
+        bottom = node_height - 24.0
+        step = (bottom - top) / max(1, count - 1)
+        for idx, edge in enumerate(node_edges):
+            ports[edge.id] = top + idx * step
+    return ports
 
 
 def _service_dependency_badge_position(points: list[tuple[float, float]], index: int) -> tuple[float, float]:
     if len(points) < 2:
         return points[0] if points else (0.0, 0.0)
-    start, end = max(zip(points, points[1:]), key=lambda pair: (pair[1][0] - pair[0][0]) ** 2 + (pair[1][1] - pair[0][1]) ** 2)
+    segments = list(zip(points, points[1:]))
+    horizontal = [
+        pair
+        for pair in segments
+        if abs(pair[1][1] - pair[0][1]) <= 1 and abs(pair[1][0] - pair[0][0]) >= 42
+    ]
+    if horizontal:
+        start, end = max(horizontal, key=lambda pair: abs(pair[1][0] - pair[0][0]))
+    else:
+        start, end = max(segments, key=lambda pair: (pair[1][0] - pair[0][0]) ** 2 + (pair[1][1] - pair[0][1]) ** 2)
     x = (start[0] + end[0]) / 2
     y = (start[1] + end[1]) / 2
     offset = ((index % 3) - 1) * 20
@@ -600,6 +678,171 @@ def _service_dependency_flow_label(edge: GraphEdge) -> str:
 
 def _service_dependency_edge_title(edge: GraphEdge) -> str:
     return f"{_service_dependency_ledger_label(edge)} | {_service_dependency_flow_label(edge)}"
+
+
+def _security_relationship_rows(nodes: list[GraphNode], edges: list[GraphEdge]) -> tuple[dict[str, GraphNode], list[GraphEdge]]:
+    node_by_id = {node.id: node for node in nodes}
+    rows = [
+        edge
+        for edge in edges
+        if edge.source in node_by_id and edge.target in node_by_id
+    ]
+    rows.sort(key=lambda edge: (_security_edge_order(edge), _edge_record_id(edge), edge.source, edge.target, edge.id))
+    return node_by_id, rows
+
+
+def _security_edge_order(edge: GraphEdge) -> int:
+    return {
+        "protected_by": 0,
+        "allowed_by": 1,
+        "uses_sa": 2,
+        "has_binding": 3,
+        "monitored_by": 4,
+    }.get(edge.type, 9)
+
+
+def _security_relationship_size(rows: list[GraphEdge]) -> tuple[int, int]:
+    row_height = 112
+    height = HEADER_HEIGHT + 92 + max(1, len(rows)) * row_height + 72
+    return 1880, max(MIN_HEIGHT, height)
+
+
+def _write_security_relationship_svg(path: Path, view: View, nodes: list[GraphNode], edges: list[GraphEdge]) -> Path:
+    node_by_id, rows = _security_relationship_rows(nodes, edges)
+    width, height = _security_relationship_size(rows)
+    lines = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-label="{xml_escape(view.title)} relationship ledger">',
+        "<defs>",
+        '<marker id="securityArrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#94A3B8"/></marker>',
+        "</defs>",
+        '<rect width="100%" height="100%" fill="#F5F7FB"/>',
+        f'<text x="60" y="48" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" fill="#111827">{xml_escape(view.title)}</text>',
+        '<text x="60" y="82" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#5B6573">One row per real security / monitoring graph edge. No crossing lines, no inferred controls.</text>',
+        f'<text x="60" y="104" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#5B6573">{len(node_by_id)} nodes | {len(rows)} control relationships | source workbook trace included</text>',
+        f'<rect x="40" y="{HEADER_HEIGHT}" width="{width - 80}" height="{height - HEADER_HEIGHT - 44}" rx="18" fill="#FFFFFF" stroke="#CBD5E1"/>',
+        f'<text x="84" y="{HEADER_HEIGHT + 42}" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#334155">Source</text>',
+        f'<text x="548" y="{HEADER_HEIGHT + 42}" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#334155">Relationship</text>',
+        f'<text x="1080" y="{HEADER_HEIGHT + 42}" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#334155">Target control / monitoring</text>',
+        f'<text x="1500" y="{HEADER_HEIGHT + 42}" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#334155">Source record</text>',
+    ]
+    if not rows:
+        lines.append(f'<text x="84" y="{HEADER_HEIGHT + 96}" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#64748B">No security or monitoring relationships were found in this view.</text>')
+    for idx, edge in enumerate(rows, 1):
+        source = node_by_id[edge.source]
+        target = node_by_id[edge.target]
+        y = HEADER_HEIGHT + 70 + (idx - 1) * 112
+        fill = "#F8FAFC" if idx % 2 else "#FFFFFF"
+        lines.append(f'<g data-security-row="{idx}" data-edge-id="{xml_escape(edge.id)}" data-edge-number="{idx}" data-edge-type="{xml_escape(edge.type)}" data-source="{xml_escape(edge.source)}" data-target="{xml_escape(edge.target)}" role="img" aria-label="{xml_escape(_edge_accessible_label(edge))}">')
+        lines.append(f'<rect x="64" y="{y}" width="{width - 128}" height="88" rx="12" fill="{fill}" stroke="#E2E8F0"/>')
+        _append_security_svg_node_chip(lines, source, 84, y + 14, 370, "source")
+        color = _security_relationship_color(edge)
+        lines.append(f'<line x1="474" y1="{y + 44}" x2="1038" y2="{y + 44}" stroke="{color}" stroke-width="3" marker-end="url(#securityArrow)"/>')
+        lines.append(f'<circle cx="528" cy="{y + 44}" r="15" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="5"/>')
+        lines.append(f'<circle cx="528" cy="{y + 44}" r="13" fill="{color}" stroke="#FFFFFF" stroke-width="2"/>')
+        lines.append(f'<text x="528" y="{y + 48}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" fill="#FFFFFF">{idx}</text>')
+        lines.append(f'<text x="560" y="{y + 34}" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="#111827">{xml_escape(edge.type.replace("_", " "))}</text>')
+        lines.append(f'<text x="560" y="{y + 58}" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#64748B">{xml_escape(_clip(edge.label or _edge_label(edge) or "-", 62))}</text>')
+        _append_security_svg_node_chip(lines, target, 1080, y + 14, 360, "target")
+        lines.append(f'<text x="1500" y="{y + 34}" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" fill="#111827">{xml_escape(_clip(_edge_record_id(edge) or edge.id, 34))}</text>')
+        lines.append(f'<text x="1500" y="{y + 58}" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#64748B">{xml_escape(_clip(edge.metadata.get("source_sheet", "") if isinstance(edge.metadata, dict) else "", 36))}</text>')
+        lines.append("</g>")
+    lines.append("</svg>")
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return path
+
+
+def _append_security_svg_node_chip(lines: list[str], node: GraphNode, x: int, y: int, width: int, role: str) -> None:
+    style = _node_style(node, dark=False)
+    status = _status_badge(_status_kind(node.status))
+    lines.append(f'<g data-{role}-node-id="{xml_escape(node.id)}">')
+    lines.append(f'<rect x="{x}" y="{y}" width="{width}" height="60" rx="10" fill="{style.fill}" stroke="{style.stroke}" stroke-width="1.5"/>')
+    lines.append(f'<rect x="{x}" y="{y}" width="7" height="60" rx="3.5" fill="{style.accent}"/>')
+    lines.append(f'<text x="{x + 18}" y="{y + 24}" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" fill="#111827">{xml_escape(_clip(node.label, 38))}</text>')
+    lines.append(f'<text x="{x + 18}" y="{y + 46}" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#64748B">{xml_escape(node.type)}</text>')
+    if status:
+        badge_text, badge_bg, badge_fg = status
+        lines.append(f'<rect x="{x + width - 72}" y="{y + 12}" width="54" height="20" rx="10" fill="{badge_bg}" stroke="{style.stroke}" stroke-width="0.6"/>')
+        lines.append(f'<text x="{x + width - 45}" y="{y + 26}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9" font-weight="700" fill="{badge_fg}">{badge_text}</text>')
+    lines.append("</g>")
+
+
+def _write_security_relationship_png(path: Path, view: View, nodes: list[GraphNode], edges: list[GraphEdge]) -> Path:
+    node_by_id, rows = _security_relationship_rows(nodes, edges)
+    width, height = _security_relationship_size(rows)
+    image = Image.new("RGB", (width, height), "#F5F7FB")
+    draw = ImageDraw.Draw(image)
+    title_font = _font(30, bold=True)
+    note_font = _font(14)
+    small_font = _font(12)
+    row_font = _font(13, bold=True)
+    draw.text((60, 25), view.title, fill="#111827", font=title_font)
+    draw.text((60, 68), "One row per real security / monitoring graph edge. No crossing lines, no inferred controls.", fill="#5B6573", font=note_font)
+    draw.text((60, 94), f"{len(node_by_id)} nodes | {len(rows)} control relationships | source workbook trace included", fill="#5B6573", font=small_font)
+    draw.rounded_rectangle((40, HEADER_HEIGHT, width - 40, height - 44), radius=18, fill="#FFFFFF", outline="#CBD5E1")
+    draw.text((84, HEADER_HEIGHT + 27), "Source", fill="#334155", font=row_font)
+    draw.text((548, HEADER_HEIGHT + 27), "Relationship", fill="#334155", font=row_font)
+    draw.text((1080, HEADER_HEIGHT + 27), "Target control / monitoring", fill="#334155", font=row_font)
+    draw.text((1500, HEADER_HEIGHT + 27), "Source record", fill="#334155", font=row_font)
+    for idx, edge in enumerate(rows, 1):
+        source = node_by_id[edge.source]
+        target = node_by_id[edge.target]
+        y = HEADER_HEIGHT + 70 + (idx - 1) * 112
+        fill = "#F8FAFC" if idx % 2 else "#FFFFFF"
+        draw.rounded_rectangle((64, y, width - 64, y + 88), radius=12, fill=fill, outline="#E2E8F0")
+        _draw_security_png_node_chip(draw, source, 84, y + 14, 370)
+        color = _security_relationship_color(edge)
+        draw.line((474, y + 44, 1038, y + 44), fill=color, width=3)
+        _draw_arrowhead(draw, (1008, y + 44), (1038, y + 44), color)
+        draw.ellipse((512, y + 28, 544, y + 60), fill="#FFFFFF", outline="#FFFFFF", width=5)
+        draw.ellipse((515, y + 31, 541, y + 57), fill=color, outline="#FFFFFF", width=2)
+        number = str(idx)
+        draw.text((528 - _text_width(draw, number, small_font) / 2, y + 36), number, fill="#FFFFFF", font=small_font)
+        draw.text((560, y + 20), edge.type.replace("_", " "), fill="#111827", font=row_font)
+        draw.text((560, y + 45), _clip(edge.label or _edge_label(edge) or "-", 62), fill="#64748B", font=small_font)
+        _draw_security_png_node_chip(draw, target, 1080, y + 14, 360)
+        draw.text((1500, y + 20), _clip(_edge_record_id(edge) or edge.id, 34), fill="#111827", font=row_font)
+        sheet = edge.metadata.get("source_sheet", "") if isinstance(edge.metadata, dict) else ""
+        draw.text((1500, y + 45), _clip(sheet, 36), fill="#64748B", font=_font(11))
+    image.save(path)
+    return path
+
+
+def _draw_security_png_node_chip(draw: ImageDraw.ImageDraw, node: GraphNode, x: int, y: int, width: int) -> None:
+    style = _node_style(node, dark=False)
+    draw.rounded_rectangle((x, y, x + width, y + 60), radius=10, fill=style.fill, outline=style.stroke, width=2)
+    draw.rounded_rectangle((x, y, x + 7, y + 60), radius=4, fill=style.accent)
+    draw.text((x + 18, y + 12), _clip(node.label, 38), fill="#111827", font=_font(13, bold=True))
+    draw.text((x + 18, y + 38), node.type, fill="#64748B", font=_font(11))
+    badge = _status_badge(_status_kind(node.status))
+    if badge:
+        badge_text, badge_bg, badge_fg = badge
+        box = (x + width - 72, y + 12, x + width - 18, y + 32)
+        draw.rounded_rectangle(box, radius=10, fill=badge_bg, outline=style.stroke)
+        draw.text((box[0] + 27 - _text_width(draw, badge_text, _font(9, bold=True)) / 2, y + 16), badge_text, fill=badge_fg, font=_font(9, bold=True))
+
+
+def _write_security_relationship_pdf(path: Path, view: View, nodes: list[GraphNode], edges: list[GraphEdge]) -> Path:
+    png_path = path.with_suffix(".pdf.png")
+    _write_security_relationship_png(png_path, view, nodes, edges)
+    image = Image.open(png_path)
+    width, height = image.size
+    c = canvas.Canvas(str(path), pagesize=(width, height))
+    c.drawImage(str(png_path), 0, 0, width=width, height=height)
+    c.save()
+    png_path.unlink(missing_ok=True)
+    return path
+
+
+def _security_relationship_color(edge: GraphEdge) -> str:
+    if edge.type == "monitored_by":
+        return "#16A34A"
+    if edge.type in {"uses_sa", "has_binding"}:
+        return "#7C3AED"
+    if edge.type == "protected_by":
+        return "#DC2626"
+    if edge.type == "allowed_by":
+        return "#EA580C"
+    return "#64748B"
 
 
 def _write_svg(path: Path, view: View, nodes: list[GraphNode], edges: list[GraphEdge], positions: dict[str, tuple[int, int]]) -> Path:

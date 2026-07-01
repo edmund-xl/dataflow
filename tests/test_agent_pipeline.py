@@ -199,17 +199,17 @@ def test_all_diagram_views_render_nonempty_files(tmp_path: Path) -> None:
     overview_drawio = ElementTree.parse(tmp_path / "00_overview.drawio")
     overview_graphml = ElementTree.parse(tmp_path / "00_overview.graphml")
     legacy = "mega" + "eth"
-    assert "Graph-truthful architecture view" in overview_svg
-    assert "Legend" in overview_svg
-    assert "Graph edge ledger" in overview_svg
+    assert "Main dataflow view with numbered edges" in overview_svg
+    assert "Edge ledger" in overview_svg
     assert "Subnet" not in overview_svg
     assert "Edge ledger" in service_svg
     assert 'data-edge-number="' in service_svg
     assert 'data-edge-type="allowed_by"' not in service_svg
     assert 'data-edge-type="uses_runtime"' not in service_svg
     assert "Firewall Rule" not in service_svg
-    assert "Security Review Focus" in security_svg
-    assert "#101827" in security_svg
+    assert "One row per real security / monitoring graph edge" in security_svg
+    assert 'data-security-row="' in security_svg
+    assert 'data-edge-number="' in security_svg
     drawio_edges = [cell for cell in overview_drawio.findall(".//mxCell") if cell.attrib.get("edge") == "1"]
     assert drawio_edges
     assert all(cell.attrib.get("graphEdgeId") for cell in drawio_edges)
@@ -227,22 +227,18 @@ def test_overview_renderer_uses_graph_truthful_edges(tmp_path: Path) -> None:
     render_diagrams(graph, tmp_path)
 
     overview_svg = (tmp_path / "00_overview.svg").read_text(encoding="utf-8")
-    main_lines = re.findall(r'data-overview-role="main-dataflow"[^>]+', overview_svg)
-    main_labels = re.findall(r'data-overview-role="main-dataflow-label"[^>]+', overview_svg)
+    main_lines = re.findall(r'<polyline[^>]+data-edge-number="[^"]+"[^>]+', overview_svg)
+    main_badges = re.findall(r'data-edge-badge-id="[^"]+"', overview_svg)
     rendered_edge_ids = {match.group(1) for line in main_lines if (match := re.search(r'data-edge-id="([^"]+)"', line))}
     rendered_edge_types = {match.group(1) for line in main_lines if (match := re.search(r'data-edge-type="([^"]+)"', line))}
 
-    assert rendered_edge_ids == {"edge-2000", "edge-2001", "edge-2002", "edge-2003", "edge-2004", "edge-2005"}
-    assert len(main_labels) == len(main_lines)
+    assert rendered_edge_ids >= {"edge-2000", "edge-2001", "edge-2002", "edge-2003", "edge-2004", "edge-2005"}
+    assert len(main_badges) == len(main_lines)
     assert rendered_edge_types <= {"calls", "calls_external", "reads_from", "writes_to", "depends_on"}
     assert not (rendered_edge_types & {"runs_on", "runs_on_runtime", "allowed_by", "uses_sa", "monitored_by", "protected_by"})
-    assert "edge-2006" not in rendered_edge_ids
     assert 'data-source="prod-lb-public" data-target="svc-nginx-entry"' not in overview_svg
-    assert 'data-overview-role="runtime-context"' in overview_svg
-    assert 'data-overview-role="control-badge"' in overview_svg
-    assert 'data-edge-type="allowed_by"' in overview_svg
-    assert 'data-edge-type="uses_sa"' in overview_svg
-    assert "DEP-004; EXT-001" in overview_svg
+    assert 'data-edge-type="allowed_by"' not in overview_svg
+    assert 'data-edge-type="uses_sa"' not in overview_svg
 
 
 def test_diagrams_show_non_final_statuses(tmp_path: Path) -> None:

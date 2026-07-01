@@ -18,13 +18,15 @@
 - `scripts/check_dcp.sh` 和 `scripts/build_dataflow_package.sh` 支持透传 `--env`、`--version`、`--output` 等底层 CLI 参数。
 - 通用 v1.0 模板资料包同步补齐 runtime / target / interaction 字段、数据字典说明和嵌套模板包内容。
 - README、DCP 自检说明、交付包生成说明和 DevOps manual 增加环境自检与脚本自定义输出示例。
-- Overview 数据流图改为 graph-truthful 专业布局：主线只展示真实数据流 edge，runtime / Firewall / IAM / Monitoring 改为上下文 chip、摘要卡和 ledger，避免补画不存在的数据流。
+- Overview 数据流图改为 graph-truthful 编号主链路布局：主线只展示真实数据流 edge，runtime / Firewall / IAM / Monitoring 不伪装成主数据流。
 - 自检摘要和修复清单改为操作型输出，先展示提交判断、关键指标和按严重度 / Sheet 分组的修复项。
 - `query-port` JSON 输出增加 source row、Evidence_ID 和 graph edge 追踪信息。
 - `metadata.json` 增加 `schema_version` 和 `template_version`，README 增加 schema / template 兼容关系。
 - Overview renderer 拆分为独立模块，降低后续图形优化的维护风险。
 - 分层图新增 draw.io `.drawio` 可编辑源图和 GraphML `.graphml` 工具交换文件，便于拖拽调整和导入专业图形工具。
 - 服务依赖图改为主数据流编号视图：图上线条只显示编号，右侧 `Edge ledger` 展示来源记录、关系类型、端口和源/目标对象，降低线条标签重叠。
+- 总览图同步改为主数据流编号视图，安全与监控图改为逐行关系视图，避免控制类关系大量交叉堆叠。
+- 主数据流编号渲染改为先画线、再画节点、最后画编号，并将编号锚定到水平线段上，避免数字被线条覆盖。
 
 ### Fixed
 
@@ -131,13 +133,15 @@ This file records user-visible changes to Dataflow Agent. The repository does no
 - `scripts/check_dcp.sh` and `scripts/build_dataflow_package.sh` now forward lower-level CLI options such as `--env`, `--version`, and `--output`.
 - Synchronized the generic v1.0 template package with runtime / target / interaction fields, data dictionary notes, and the nested template bundle.
 - Updated README, DCP self-check guide, package generation guide, and DevOps manual with the environment doctor and custom output examples.
-- Changed the overview data-flow diagram to a graph-truthful professional layout: the main lane renders only real dataflow edges, while runtime / Firewall / IAM / Monitoring are shown as context chips, summary cards, and a ledger instead of inferred flow lines.
+- Changed the overview data-flow diagram to a graph-truthful numbered main-flow layout: the main canvas renders only real dataflow edges, and runtime / Firewall / IAM / Monitoring relationships are not disguised as primary dataflow.
 - Changed check summaries and fix lists to operational outputs with submission decisions, key metrics, and severity / sheet grouped findings first.
 - Added source row, Evidence_ID, and graph edge traceability to `query-port` JSON output.
 - Added `schema_version` and `template_version` to `metadata.json`; README now documents schema / template compatibility.
 - Split the overview renderer into its own module to reduce diagram-renderer maintenance risk.
 - Added draw.io `.drawio` editable source files and GraphML `.graphml` exchange files for layered diagrams, enabling drag editing and import into professional diagram tools.
 - Changed the service dependency layer to a numbered main-dataflow view: lines show only edge numbers, while the right-side `Edge ledger` records source rows, relationship types, ports, and source/target objects to reduce label overlap.
+- Changed the overview layer to the same numbered main-dataflow view and changed the security / monitoring layer to a row-based relationship view to avoid dense crossing control relationships.
+- Changed numbered main-dataflow rendering to draw lines first, nodes second, and edge-number badges last, with badges anchored to horizontal edge segments so numbers are not covered by lines.
 
 ### Fixed
 
