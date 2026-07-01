@@ -35,7 +35,7 @@ OVERVIEW_DATAFLOW_EDGES = {"calls", "calls_external", "reads_from", "writes_to",
 OVERVIEW_CONTEXT_EDGES = {"runs_on", "runs_on_runtime", "allowed_by", "protected_by", "uses_sa", "monitored_by"}
 OVERVIEW_NODE_WIDTH = 230
 OVERVIEW_NODE_HEIGHT = 94
-OVERVIEW_LEDGER_WIDTH = 360
+OVERVIEW_LEDGER_WIDTH = 430
 LEFT_MARGIN = 72
 
 
@@ -430,9 +430,10 @@ def _append_overview_svg_ledger(lines: list[str], layout: OverviewLayout) -> Non
         lines.append(f'<rect x="{x + 24}" y="{y - 13}" width="42" height="22" rx="5" fill="{_overview_edge_label_fill(edge)}" stroke="{color}" stroke-width="1"/>')
         lines.append(f'<text x="{x + 34}" y="{y + 2}" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="{color}">E{idx}</text>')
         lines.append(f'<text x="{x + 76}" y="{y - 2}" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" fill="#111827">{xml_escape(edge.type)}</text>')
-        lines.append(f'<text x="{x + 76}" y="{y + 16}" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#334155">{xml_escape(_clip(edge.source + " -> " + edge.target, 36))}</text>')
-        lines.append(f'<text x="{x + 76}" y="{y + 32}" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#64748B">{xml_escape(_clip(record_ids, 38))}</text>')
-        y += 72
+        lines.append(f'<text x="{x + 76}" y="{y + 16}" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#334155">{xml_escape(_clip(edge.source + " -> " + edge.target, 48))}</text>')
+        lines.append(f'<text x="{x + 76}" y="{y + 32}" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#475569">{xml_escape(_clip(_overview_edge_ledger_label(edge), 48))}</text>')
+        lines.append(f'<text x="{x + 76}" y="{y + 48}" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#64748B">{xml_escape(_clip(record_ids, 48))}</text>')
+        y += 86
     lines.append(f'<rect x="{x + 24}" y="{layout.height - 312}" width="{OVERVIEW_LEDGER_WIDTH - 48}" height="78" rx="10" fill="#FFF7ED" stroke="#F59E0B" stroke-width="1.5"/>')
     lines.append(f'<text x="{x + 42}" y="{layout.height - 282}" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" fill="#92400E">Semantic guardrail</text>')
     lines.append(f'<text x="{x + 42}" y="{layout.height - 258}" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#92400E">No relationship is rendered as dataflow unless it exists in graph.</text>')
@@ -440,7 +441,7 @@ def _append_overview_svg_ledger(lines: list[str], layout: OverviewLayout) -> Non
 
 
 def _append_overview_svg_badge(lines: list[str], x: float, y: float, label: str, color: str, fill: str, role: str, edge: GraphEdge | None = None) -> None:
-    width = max(66, min(220, len(label) * 7 + 34))
+    width = 46 if role == "main-dataflow-label" and label.startswith("E") and label[1:].isdigit() else max(66, min(220, len(label) * 7 + 34))
     edge_attrs = ""
     if edge:
         badge_attr = f' data-edge-badge-id="{xml_escape(edge.id)}"' if role == "main-dataflow-label" else ""
@@ -468,8 +469,9 @@ def _overview_edge_points(edge: GraphEdge, layout: OverviewLayout) -> list[tuple
     target_rank = _overview_node_lane_rank(edge.target, layout)
     target_node = layout.nodes.get(edge.target)
     if edge.type == "calls_external" or (target_node and target_node.type in {"external_service", "data_asset"}):
-        lane_y = _overview_terminal_bus_y(edge, layout, source, target, route_lane)
-        lane_x = sx + 42 + route_lane * 26
+        terminal_lane = _overview_terminal_lane_index(edge, layout)
+        lane_y = _overview_terminal_bus_y(edge, layout, source, target, terminal_lane)
+        lane_x = sx + 42 + terminal_lane * 26
         return [(sx, sy), (lane_x, sy), (lane_x, lane_y), (tx - 56, lane_y), (tx - 56, ty), (tx, ty)]
     if target[1] > source[1] + 70:
         lane_x = sx + 42 + route_lane * 18
@@ -522,6 +524,44 @@ def _overview_route_lane(edge: GraphEdge, layout: OverviewLayout) -> int:
     return (_overview_edge_type_rank(edge) + source_index * 2 + target_index + pair_index) % 5
 
 
+def _overview_terminal_lane_index(edge: GraphEdge, layout: OverviewLayout) -> int:
+    direction = _overview_terminal_direction(edge, layout)
+    terminal_edges = [
+        item
+        for item in layout.main_edges
+        if _overview_terminal_direction(item, layout) == direction
+    ]
+    terminal_edges.sort(
+        key=lambda item: (
+            _overview_node_lane_rank(item.source, layout),
+            _overview_node_lane_rank(item.target, layout),
+            _overview_edge_type_rank(item),
+            _edge_number(item),
+            item.source,
+            item.target,
+            item.id,
+        )
+    )
+    return terminal_edges.index(edge) if edge in terminal_edges else 0
+
+
+def _overview_terminal_direction(edge: GraphEdge, layout: OverviewLayout) -> str:
+    target_node = layout.nodes.get(edge.target)
+    if not (edge.type == "calls_external" or (target_node and target_node.type in {"external_service", "data_asset"})):
+        return "non_terminal"
+    source = layout.positions.get(edge.source)
+    target = layout.positions.get(edge.target)
+    if not source or not target:
+        return "same"
+    if target[1] > source[1] + OVERVIEW_NODE_HEIGHT * 0.45:
+        return "down"
+    if target[1] < source[1] - OVERVIEW_NODE_HEIGHT * 0.45:
+        return "up"
+    if source[1] <= layout.main_top + OVERVIEW_NODE_HEIGHT * 1.2:
+        return "same_top"
+    return "same_bottom"
+
+
 def _overview_node_lane_rank(node_id: str, layout: OverviewLayout) -> int:
     position = layout.positions.get(node_id)
     if not position:
@@ -542,21 +582,14 @@ def _overview_terminal_bus_y(
 ) -> float:
     source_y = source[1]
     target_y = target[1]
-    if abs(target_y - source_y) < OVERVIEW_NODE_HEIGHT:
-        above = source_y - 34 - lane * 16
-        below = source_y + OVERVIEW_NODE_HEIGHT + 34 + lane * 16
-        if above > layout.main_top + 72:
-            return above
-        return below
-    if target_y > source_y + OVERVIEW_NODE_HEIGHT:
-        return max(source_y + OVERVIEW_NODE_HEIGHT + 34 + lane * 16, target_y - 42)
-    if target_y + OVERVIEW_NODE_HEIGHT < source_y:
-        return min(source_y - 34 - lane * 16, target_y + OVERVIEW_NODE_HEIGHT + 42)
-    if edge.type == "calls_external":
-        return source_y + OVERVIEW_NODE_HEIGHT + 34 + lane * 16
-    if edge.type in {"reads_from", "writes_to"}:
-        return target_y + OVERVIEW_NODE_HEIGHT + 34 + lane * 16
-    return max(source_y, target_y) + OVERVIEW_NODE_HEIGHT + 34 + lane * 16
+    direction = _overview_terminal_direction(edge, layout)
+    top_bus = min(source_y, target_y) - 38 - lane * 16
+    bottom_bus = max(source_y, target_y) + OVERVIEW_NODE_HEIGHT + 38 + lane * 16
+    if direction in {"up", "same_top"}:
+        return max(layout.main_top + 72, top_bus)
+    if direction in {"down", "same_bottom"}:
+        return min(layout.controls_top - 72, bottom_bus)
+    return max(layout.main_top + 72, min(layout.controls_top - 72, bottom_bus))
 
 
 def _overview_label_anchor(points: list[tuple[float, float]]) -> tuple[float, float]:
@@ -606,11 +639,14 @@ def _overview_edge_width(edge: GraphEdge) -> str:
 
 def _overview_edge_display_label(edge: GraphEdge, layout: OverviewLayout) -> str:
     index = layout.main_edges.index(edge) + 1 if edge in layout.main_edges else 0
-    prefix = f"E{index}"
-    status = " PENDING" if _status_kind(edge.status) == "pending" else ""
-    value = edge.label or edge.type
+    return f"E{index}" if index else "E"
+
+
+def _overview_edge_ledger_label(edge: GraphEdge) -> str:
+    status = f" | {edge.status}" if edge.status else ""
     action = "write " if edge.type == "writes_to" else "read " if edge.type == "reads_from" else ""
-    return _clip(f"{prefix}{status} {action}{value}".strip(), 30)
+    value = edge.label or edge.type
+    return f"{action}{value}{status}".strip()
 
 
 def _overview_node_colors(node: GraphNode) -> tuple[str, str]:
@@ -849,9 +885,10 @@ def _draw_overview_png_ledger(draw: ImageDraw.ImageDraw, layout: OverviewLayout,
         draw.rounded_rectangle((x + 24, y - 13, x + 66, y + 9), radius=5, fill=_overview_edge_label_fill(edge), outline=color)
         draw.text((x + 34, y - 9), f"E{idx}", fill=color, font=tiny_font)
         draw.text((x + 76, y - 14), edge.type, fill="#111827", font=small_font)
-        draw.text((x + 76, y + 4), _clip(edge.source + " -> " + edge.target, 36), fill="#334155", font=tiny_font)
-        draw.text((x + 76, y + 20), _clip(_overview_equivalent_record_ids(edge, layout.all_edges), 38), fill="#64748B", font=tiny_font)
-        y += 72
+        draw.text((x + 76, y + 4), _clip(edge.source + " -> " + edge.target, 48), fill="#334155", font=tiny_font)
+        draw.text((x + 76, y + 20), _clip(_overview_edge_ledger_label(edge), 48), fill="#475569", font=tiny_font)
+        draw.text((x + 76, y + 36), _clip(_overview_equivalent_record_ids(edge, layout.all_edges), 48), fill="#64748B", font=tiny_font)
+        y += 86
     guard_y = layout.height - 312
     draw.rounded_rectangle((x + 24, guard_y, x + OVERVIEW_LEDGER_WIDTH - 24, guard_y + 78), radius=10, fill="#FFF7ED", outline="#F59E0B")
     draw.text((x + 42, guard_y + 16), "Semantic guardrail", fill="#92400E", font=small_font)
@@ -859,7 +896,7 @@ def _draw_overview_png_ledger(draw: ImageDraw.ImageDraw, layout: OverviewLayout,
 
 
 def _draw_overview_png_badge(draw: ImageDraw.ImageDraw, x: float, y: float, label: str, color: str, fill: str, font: ImageFont.ImageFont, text_fill: str = "#1F2937") -> None:
-    width = max(66, min(220, _text_width(draw, label, font) + 34))
+    width = 46 if label.startswith("E") and label[1:].isdigit() else max(66, min(220, _text_width(draw, label, font) + 34))
     draw.rounded_rectangle((x, y, x + width, y + 28), radius=14, fill=fill, outline=color, width=2)
     draw.ellipse((x + 9, y + 10, x + 17, y + 18), fill=color)
     draw.text((x + 24, y + 7), _clip(label, 30), fill=text_fill, font=font)
