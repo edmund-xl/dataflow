@@ -68,7 +68,7 @@ def run_risk(state: PipelineState) -> None:
 
 
 def run_render(state: PipelineState) -> None:
-    render_diagrams(state.graph, state.paths.diagrams_dir)
+    render_diagrams(state.graph, state.paths.diagrams_dir, findings=state.validation.findings + state.risks)
 
 
 def run_service_drilldown(

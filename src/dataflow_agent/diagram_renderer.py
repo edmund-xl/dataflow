@@ -9,7 +9,7 @@ from reportlab.lib.pagesizes import landscape, letter
 from reportlab.pdfgen import canvas
 
 from .editable_exporter import write_editable_outputs
-from .models import GraphEdge, GraphModel, GraphNode
+from .models import Finding, GraphEdge, GraphModel, GraphNode
 from .util import safe_id, xml_escape
 
 
@@ -138,15 +138,15 @@ DETAIL_KEYS = (
 )
 
 
-def render_diagrams(graph: GraphModel, diagrams_dir: Path) -> list[Path]:
+def render_diagrams(graph: GraphModel, diagrams_dir: Path, findings: list[Finding] | None = None) -> list[Path]:
     diagrams_dir.mkdir(parents=True, exist_ok=True)
     outputs: list[Path] = []
     for view in VIEWS:
         nodes, edges = _select_view(graph, view)
-        if view.filename in {"00_overview", "03_service_dependency_layer"}:
+        if view.filename in {"00_overview", "03_service_dependency_layer", "05_security_monitoring_layer"}:
             from .diagram_overview import render_overview_outputs
 
-            outputs.extend(render_overview_outputs(graph, diagrams_dir, view))
+            outputs.extend(render_overview_outputs(graph, diagrams_dir, view, findings=findings))
             continue
         else:
             positions = _layout(nodes)

@@ -9,6 +9,7 @@
 ### Changed
 
 - 总览图和服务依赖图保留“入口上下文 + 主数据流 + 控制摘要 + edge ledger”的信息丰富大画布结构，并改为碰撞避让的 inline edge detail 卡片展示端口、协议、状态、来源记录、关系类型和源/目标对象。
+- 安全/监控图改为同一套信息丰富大画布结构：保留真实主数据流，使用节点覆盖标记、Security / Monitoring Ledger 和 Coverage Matrix 展示 Firewall、IAM、Monitoring 覆盖与风险，避免控制关系长线堆叠。
 - 总览图和服务依赖图放宽 ELK layered orthogonal layout 的节点、层级、边与节点、边与边间距，减少局部线条、标签和节点堆叠。
 - SVG、PNG、PDF 共用同一套 inline detail 位置计算结果，避免不同格式之间出现布局不一致。
 - 主数据流仍只渲染真实 graph edge；runtime、Firewall、IAM、Monitoring 继续作为上下文摘要，不伪装成主数据流。
@@ -136,6 +137,7 @@ This file records user-visible changes to Dataflow Agent. Historical development
 ### Changed
 
 - Kept the overview and service dependency diagrams on the information-rich large-canvas structure with entry context, primary dataflow, control summary, and edge ledger, and changed primary edge annotations to collision-aware inline edge detail cards that show ports, protocols, status, source records, relationship type, and source/target objects.
+- Changed the security / monitoring diagram to the same information-rich large-canvas structure: it keeps real primary dataflow on the canvas and shows Firewall, IAM, and Monitoring coverage through node overlays, the Security / Monitoring Ledger, and the Coverage Matrix instead of dense long crossing control lines.
 - Increased ELK layered orthogonal layout spacing for nodes, layers, edge-to-node distance, and edge-to-edge distance in the overview and service dependency diagrams to reduce local line, label, and node stacking.
 - Made SVG, PNG, and PDF share the same inline detail placement calculation so generated formats remain visually consistent.
 - Primary dataflow still renders only real graph edges; runtime, Firewall, IAM, and Monitoring remain context summaries and are not rendered as primary dataflow.

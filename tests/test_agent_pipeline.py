@@ -247,7 +247,14 @@ def test_all_diagram_views_render_nonempty_files(tmp_path: Path) -> None:
     assert 'data-edge-type="allowed_by"' not in _main_dataflow_lines(service_svg)
     assert 'data-edge-type="uses_runtime"' not in _main_dataflow_lines(service_svg)
     assert "Firewall Rule" not in service_svg
-    assert "Structurizr/C4-style architecture view" in security_svg
+    assert "Security / Monitoring Ledger" in security_svg
+    assert "Security and Monitoring Coverage Matrix" in security_svg
+    assert "Primary graph dataflow with security / monitoring context" in security_svg
+    assert 'data-overview-role="security-monitoring-ledger"' in security_svg
+    assert 'data-overview-role="security-coverage-card"' in security_svg
+    assert 'data-overview-role="main-dataflow"' in security_svg
+    assert 'data-edge-type="allowed_by"' not in _main_dataflow_lines(security_svg)
+    assert 'data-edge-type="monitored_by"' not in _main_dataflow_lines(security_svg)
     assert "#101827" not in security_svg
     assert 'data-security-row="' not in security_svg
     drawio_edges = [cell for cell in overview_drawio.findall(".//mxCell") if cell.attrib.get("edge") == "1"]

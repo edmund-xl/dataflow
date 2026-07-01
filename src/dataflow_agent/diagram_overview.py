@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 from reportlab.pdfgen import canvas
 
 from .editable_exporter import write_editable_outputs
-from .models import GraphEdge, GraphModel, GraphNode
+from .models import Finding, GraphEdge, GraphModel, GraphNode
 from .util import xml_escape
 from .diagram_renderer import (
     TYPE_ORDER,
@@ -44,8 +44,8 @@ OVERVIEW_INLINE_LABEL_HEIGHT = 58
 LEFT_MARGIN = 72
 
 
-def render_overview_outputs(graph: GraphModel, diagrams_dir: Path, view: View) -> list[Path]:
-    layout = _overview_layout(graph)
+def render_overview_outputs(graph: GraphModel, diagrams_dir: Path, view: View, findings: list[Finding] | None = None) -> list[Path]:
+    layout = _overview_layout(graph, security_mode=view.filename == "05_security_monitoring_layer", findings=findings or [])
     visible_nodes = [node for node_id, node in layout.nodes.items() if node_id in layout.positions]
     outputs = [
         _write_overview_svg(diagrams_dir / f"{view.filename}.svg", view, layout),
@@ -86,6 +86,8 @@ class OverviewLayout:
     all_edges: list[GraphEdge]
     edge_routes: dict[str, list[tuple[float, float]]]
     inline_labels: dict[str, "OverviewInlineLabel"]
+    findings: tuple[Finding, ...] = ()
+    security_mode: bool = False
     layout_engine: str = "builtin"
 
 
@@ -107,7 +109,7 @@ class OverviewInlineLabel:
     anchor_y: float
 
 
-def _overview_layout(graph: GraphModel) -> OverviewLayout:
+def _overview_layout(graph: GraphModel, security_mode: bool = False, findings: list[Finding] | None = None) -> OverviewLayout:
     main_edges = _overview_main_edges(graph.edges)
     positions, edge_routes, layout_size, layout_engine = _overview_positions_and_routes(graph.nodes, main_edges)
     max_x = max((x for x, _ in positions.values()), default=LEFT_MARGIN) + OVERVIEW_NODE_WIDTH
@@ -118,7 +120,7 @@ def _overview_layout(graph: GraphModel) -> OverviewLayout:
     main_top = 280
     main_height = max(420, max_y - main_top + 72)
     controls_top = main_top + main_height + 28
-    controls_height = 220
+    controls_height = 280 if security_mode else 220
     height = controls_top + controls_height + 82
     data_node_ids = {edge.source for edge in main_edges}.union(edge.target for edge in main_edges)
     context_edges = [
@@ -146,6 +148,8 @@ def _overview_layout(graph: GraphModel) -> OverviewLayout:
         all_edges=graph.edges,
         edge_routes=edge_routes,
         inline_labels={},
+        findings=tuple(findings or []),
+        security_mode=security_mode,
         layout_engine=layout_engine,
     )
     return replace(layout, inline_labels=_overview_inline_labels(layout))
@@ -241,12 +245,18 @@ def _overview_main_edges(edges: list[GraphEdge]) -> list[GraphEdge]:
 
 
 def _overview_layout_note(layout: OverviewLayout) -> str:
+    if layout.security_mode and layout.layout_engine == "elk":
+        return "Security and monitoring view | full graph dataflow with overlays | ELK routed | no inferred edges"
+    if layout.security_mode:
+        return "Security and monitoring view | full graph dataflow with overlays | no inferred edges"
     if layout.layout_engine == "elk":
         return "Graph-truthful architecture view | ELK layered orthogonal routing | no inferred dataflow edges"
     return "Graph-truthful architecture view | built-in deterministic routing | no inferred dataflow edges"
 
 
 def _overview_primary_lane_label(layout: OverviewLayout) -> str:
+    if layout.security_mode:
+        return "Primary graph dataflow with security / monitoring context"
     return "Primary graph dataflow - ELK routed" if layout.layout_engine == "elk" else "Primary graph dataflow"
 
 
@@ -376,7 +386,8 @@ def _write_overview_svg(path: Path, view: View, layout: OverviewLayout) -> Path:
     _append_overview_svg_legend(lines, width)
     _append_overview_svg_lane(lines, 42, 140, layout.lane_width, 118, "Entry context / perimeter control")
     _append_overview_svg_lane(lines, 42, layout.main_top, layout.lane_width, layout.main_height, _overview_primary_lane_label(layout))
-    _append_overview_svg_lane(lines, 42, layout.controls_top, layout.lane_width, layout.controls_height, "Controls and runtime summary")
+    control_label = "Security and Monitoring Coverage Matrix" if layout.security_mode else "Controls and runtime summary"
+    _append_overview_svg_lane(lines, 42, layout.controls_top, layout.lane_width, layout.controls_height, control_label)
     _append_overview_svg_perimeter(lines, layout)
     for edge in layout.main_edges:
         _append_overview_svg_edge(lines, edge, layout)
@@ -386,10 +397,16 @@ def _write_overview_svg(path: Path, view: View, layout: OverviewLayout) -> Path:
         if node:
             _append_overview_svg_node(lines, node, position[0], position[1])
             _append_overview_svg_node_badges(lines, node, position[0], position[1], layout)
+            if layout.security_mode:
+                _append_overview_svg_security_node_overlay(lines, node, position[0], position[1], layout)
     _append_overview_svg_runtime_chips(lines, layout)
     _append_overview_svg_inline_edge_details(lines, layout)
-    _append_overview_svg_control_cards(lines, layout)
-    _append_overview_svg_ledger(lines, layout)
+    if layout.security_mode:
+        _append_overview_svg_security_matrix(lines, layout)
+        _append_overview_svg_security_ledger(lines, layout)
+    else:
+        _append_overview_svg_control_cards(lines, layout)
+        _append_overview_svg_ledger(lines, layout)
     lines.append(
         f'<text x="54" y="{height - 46}" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#475569">Renderer rule: dataflow lines come only from calls / reads_from / writes_to / calls_external graph edges; runtime and controls stay as context.</text>'
     )
@@ -539,6 +556,19 @@ def _append_overview_svg_node_badges(lines: list[str], node: GraphNode, x: int, 
         _append_overview_svg_badge(lines, x + OVERVIEW_NODE_WIDTH - 126, y + OVERVIEW_NODE_HEIGHT - 30, edge.label or "Monitored", color, fill, "control-badge", edge)
 
 
+def _append_overview_svg_security_node_overlay(lines: list[str], node: GraphNode, x: int, y: int, layout: OverviewLayout) -> None:
+    summary = _overview_node_security_summary(node, layout)
+    if not summary:
+        return
+    severity, label, color, fill = summary
+    dash = ' stroke-dasharray="9 6"' if severity != "P1" else ""
+    lines.append(
+        f'<rect x="{x - 8}" y="{y - 8}" width="{OVERVIEW_NODE_WIDTH + 16}" height="{OVERVIEW_NODE_HEIGHT + 16}" rx="12" fill="none" stroke="{color}" stroke-width="2.4"{dash} data-overview-role="security-node-overlay" data-node-id="{xml_escape(node.id)}" data-severity="{xml_escape(severity)}"/>'
+    )
+    lines.append(f'<rect x="{x + OVERVIEW_NODE_WIDTH - 66}" y="{y - 26}" width="62" height="22" rx="11" fill="{fill}" stroke="{color}" stroke-width="1.3"/>')
+    lines.append(f'<text x="{x + OVERVIEW_NODE_WIDTH - 35}" y="{y - 11}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" fill="{color}">{xml_escape(label)}</text>')
+
+
 def _append_overview_svg_runtime_chips(lines: list[str], layout: OverviewLayout) -> None:
     by_source: dict[str, list[GraphEdge]] = {}
     for edge in layout.runtime_edges:
@@ -574,6 +604,45 @@ def _append_overview_svg_control_cards(lines: list[str], layout: OverviewLayout)
         lines.append(f'<text x="{card_x + 20}" y="{y + 30}" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" fill="{color}">{xml_escape(title)}</text>')
         lines.append(f'<text x="{card_x + 20}" y="{y + 66}" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" fill="#111827">{xml_escape(_clip(heading, 24))}</text>')
         lines.append(f'<text x="{card_x + 20}" y="{y + 94}" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#475569">{xml_escape(_clip(detail, 36))}</text>')
+
+
+def _append_overview_svg_security_matrix(lines: list[str], layout: OverviewLayout) -> None:
+    rows = _overview_security_matrix(layout)
+    x = 120
+    y = layout.controls_top + 58
+    card_width = 248
+    card_height = 94
+    for idx, row in enumerate(rows[:10]):
+        card_x = x + (idx % 5) * 276
+        card_y = y + (idx // 5) * 112
+        color = str(row["color"])
+        fill = str(row["fill"])
+        lines.append(f'<g data-overview-role="security-coverage-card" data-category="{xml_escape(str(row["category"]))}" data-status="{xml_escape(str(row["status"]))}">')
+        lines.append(f'<rect x="{card_x}" y="{card_y}" width="{card_width}" height="{card_height}" rx="10" fill="{fill}" stroke="{color}" stroke-width="1.6"/>')
+        lines.append(f'<text x="{card_x + 18}" y="{card_y + 26}" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" fill="{color}">{xml_escape(str(row["category"]))}</text>')
+        lines.append(f'<text x="{card_x + 18}" y="{card_y + 53}" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" fill="#111827">{xml_escape(str(row["status"]))}</text>')
+        lines.append(f'<text x="{card_x + 18}" y="{card_y + 78}" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#475569">{xml_escape(_clip(str(row["detail"]), 38))}</text>')
+        lines.append("</g>")
+
+
+def _append_overview_svg_security_ledger(lines: list[str], layout: OverviewLayout) -> None:
+    x = layout.ledger_x
+    lines.append(f'<g data-overview-role="security-monitoring-ledger"><rect x="{x}" y="140" width="{OVERVIEW_LEDGER_WIDTH}" height="{layout.height - 222}" rx="18" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1"/>')
+    lines.append(f'<text x="{x + 24}" y="180" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#243449">Security / Monitoring Ledger</text>')
+    lines.append(f'<text x="{x + 24}" y="206" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#475569">Coverage facts and findings; dataflow lines still map to graph edges.</text>')
+    y = 244
+    for label, severity, detail in _overview_security_ledger_items(layout)[:12]:
+        color, fill = _overview_severity_colors(severity)
+        lines.append(f'<rect x="{x + 24}" y="{y - 14}" width="50" height="24" rx="6" fill="{fill}" stroke="{color}" stroke-width="1"/>')
+        lines.append(f'<text x="{x + 49}" y="{y + 3}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" fill="{color}">{xml_escape(severity)}</text>')
+        lines.append(f'<text x="{x + 86}" y="{y - 2}" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" fill="#111827">{xml_escape(_clip(label, 42))}</text>')
+        lines.append(f'<text x="{x + 86}" y="{y + 18}" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#475569">{xml_escape(_clip(detail, 50))}</text>')
+        y += 64
+    guard_y = layout.height - 312
+    lines.append(f'<rect x="{x + 24}" y="{guard_y}" width="{OVERVIEW_LEDGER_WIDTH - 48}" height="78" rx="10" fill="#FFF7ED" stroke="#F59E0B" stroke-width="1.5"/>')
+    lines.append(f'<text x="{x + 42}" y="{guard_y + 30}" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" fill="#92400E">Semantic guardrail</text>')
+    lines.append(f'<text x="{x + 42}" y="{guard_y + 54}" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#92400E">Firewall / IAM / Monitoring stay as context, not invented dataflow.</text>')
+    lines.append("</g>")
 
 
 def _append_overview_svg_ledger(lines: list[str], layout: OverviewLayout) -> None:
@@ -1136,10 +1205,11 @@ def _write_overview_png(path: Path, view: View, layout: OverviewLayout) -> Path:
     draw.text((64, 24), view.title, fill="#111827", font=title_font)
     draw.text((64, 72), _overview_layout_note(layout), fill="#475569", font=subtitle_font)
     _draw_overview_png_legend(draw, layout.width, small_font)
+    control_label = "Security and Monitoring Coverage Matrix" if layout.security_mode else "Controls and runtime summary"
     for x, y, w, h, label in [
         (42, 140, layout.lane_width, 118, "Entry context / perimeter control"),
         (42, layout.main_top, layout.lane_width, layout.main_height, _overview_primary_lane_label(layout)),
-        (42, layout.controls_top, layout.lane_width, layout.controls_height, "Controls and runtime summary"),
+        (42, layout.controls_top, layout.lane_width, layout.controls_height, control_label),
     ]:
         draw.rounded_rectangle((x, y, x + w, y + h), radius=18, fill="#FFFFFF", outline="#CBD5E1")
         draw.text((x + 18, y + 18), label, fill="#243449", font=lane_font)
@@ -1152,10 +1222,16 @@ def _write_overview_png(path: Path, view: View, layout: OverviewLayout) -> Path:
         if node:
             _draw_overview_png_node(draw, node, x, y, label_font, small_font, tiny_font)
             _draw_overview_png_node_badges(draw, node, x, y, layout, small_font)
+            if layout.security_mode:
+                _draw_overview_png_security_node_overlay(draw, node, x, y, layout, tiny_font)
     _draw_overview_png_runtime_chips(draw, layout, small_font)
     _draw_overview_png_inline_edge_details(draw, layout, small_font, tiny_font)
-    _draw_overview_png_control_cards(draw, layout, label_font, small_font, tiny_font)
-    _draw_overview_png_ledger(draw, layout, small_font, tiny_font)
+    if layout.security_mode:
+        _draw_overview_png_security_matrix(draw, layout, label_font, small_font, tiny_font)
+        _draw_overview_png_security_ledger(draw, layout, small_font, tiny_font)
+    else:
+        _draw_overview_png_control_cards(draw, layout, label_font, small_font, tiny_font)
+        _draw_overview_png_ledger(draw, layout, small_font, tiny_font)
     draw.text((54, layout.height - 56), "Renderer rule: dataflow lines come only from calls / reads_from / writes_to / calls_external graph edges; runtime and controls stay as context.", fill="#475569", font=subtitle_font)
     image.save(path)
     return path
@@ -1276,6 +1352,16 @@ def _draw_overview_png_node_badges(draw: ImageDraw.ImageDraw, node: GraphNode, x
         _draw_overview_png_badge(draw, x + OVERVIEW_NODE_WIDTH - 126, y + OVERVIEW_NODE_HEIGHT - 30, edge.label or "Monitored", color, fill, font)
 
 
+def _draw_overview_png_security_node_overlay(draw: ImageDraw.ImageDraw, node: GraphNode, x: int, y: int, layout: OverviewLayout, font: ImageFont.ImageFont) -> None:
+    summary = _overview_node_security_summary(node, layout)
+    if not summary:
+        return
+    severity, label, color, fill = summary
+    draw.rounded_rectangle((x - 8, y - 8, x + OVERVIEW_NODE_WIDTH + 8, y + OVERVIEW_NODE_HEIGHT + 8), radius=12, outline=color, width=2)
+    draw.rounded_rectangle((x + OVERVIEW_NODE_WIDTH - 66, y - 26, x + OVERVIEW_NODE_WIDTH - 4, y - 4), radius=11, fill=fill, outline=color, width=1)
+    draw.text((x + OVERVIEW_NODE_WIDTH - 58, y - 24), label, fill=color, font=font)
+
+
 def _draw_overview_png_runtime_chips(draw: ImageDraw.ImageDraw, layout: OverviewLayout, font: ImageFont.ImageFont) -> None:
     by_source: dict[str, list[GraphEdge]] = {}
     for edge in layout.runtime_edges:
@@ -1302,6 +1388,41 @@ def _draw_overview_png_control_cards(draw: ImageDraw.ImageDraw, layout: Overview
         draw.text((card_x + 20, y + 78), _clip(detail, 36), fill="#475569", font=tiny_font)
 
 
+def _draw_overview_png_security_matrix(draw: ImageDraw.ImageDraw, layout: OverviewLayout, label_font: ImageFont.ImageFont, small_font: ImageFont.ImageFont, tiny_font: ImageFont.ImageFont) -> None:
+    x = 120
+    y = layout.controls_top + 58
+    card_width = 248
+    card_height = 94
+    for idx, row in enumerate(_overview_security_matrix(layout)[:10]):
+        card_x = x + (idx % 5) * 276
+        card_y = y + (idx // 5) * 112
+        color = str(row["color"])
+        fill = str(row["fill"])
+        draw.rounded_rectangle((card_x, card_y, card_x + card_width, card_y + card_height), radius=10, fill=fill, outline=color, width=2)
+        draw.text((card_x + 18, card_y + 12), str(row["category"]), fill=color, font=small_font)
+        draw.text((card_x + 18, card_y + 38), str(row["status"]), fill="#111827", font=label_font)
+        draw.text((card_x + 18, card_y + 68), _clip(str(row["detail"]), 38), fill="#475569", font=tiny_font)
+
+
+def _draw_overview_png_security_ledger(draw: ImageDraw.ImageDraw, layout: OverviewLayout, small_font: ImageFont.ImageFont, tiny_font: ImageFont.ImageFont) -> None:
+    x = layout.ledger_x
+    draw.rounded_rectangle((x, 140, x + OVERVIEW_LEDGER_WIDTH, layout.height - 82), radius=18, fill="#FFFFFF", outline="#CBD5E1")
+    draw.text((x + 24, 164), "Security / Monitoring Ledger", fill="#243449", font=small_font)
+    draw.text((x + 24, 194), "Coverage facts and findings; dataflow lines map to graph edges.", fill="#475569", font=tiny_font)
+    y = 232
+    for label, severity, detail in _overview_security_ledger_items(layout)[:12]:
+        color, fill = _overview_severity_colors(severity)
+        draw.rounded_rectangle((x + 24, y - 13, x + 74, y + 11), radius=6, fill=fill, outline=color, width=1)
+        draw.text((x + 34, y - 9), severity, fill=color, font=tiny_font)
+        draw.text((x + 86, y - 13), _clip(label, 42), fill="#111827", font=small_font)
+        draw.text((x + 86, y + 7), _clip(detail, 50), fill="#475569", font=tiny_font)
+        y += 64
+    guard_y = layout.height - 312
+    draw.rounded_rectangle((x + 24, guard_y, x + OVERVIEW_LEDGER_WIDTH - 24, guard_y + 78), radius=10, fill="#FFF7ED", outline="#F59E0B")
+    draw.text((x + 42, guard_y + 16), "Semantic guardrail", fill="#92400E", font=small_font)
+    draw.text((x + 42, guard_y + 42), "Controls stay as context, not invented dataflow.", fill="#92400E", font=tiny_font)
+
+
 def _draw_overview_png_ledger(draw: ImageDraw.ImageDraw, layout: OverviewLayout, small_font: ImageFont.ImageFont, tiny_font: ImageFont.ImageFont) -> None:
     x = layout.ledger_x
     draw.rounded_rectangle((x, 140, x + OVERVIEW_LEDGER_WIDTH, layout.height - 82), radius=18, fill="#FFFFFF", outline="#CBD5E1")
@@ -1321,6 +1442,116 @@ def _draw_overview_png_ledger(draw: ImageDraw.ImageDraw, layout: OverviewLayout,
     draw.rounded_rectangle((x + 24, guard_y, x + OVERVIEW_LEDGER_WIDTH - 24, guard_y + 78), radius=10, fill="#FFF7ED", outline="#F59E0B")
     draw.text((x + 42, guard_y + 16), "Semantic guardrail", fill="#92400E", font=small_font)
     draw.text((x + 42, guard_y + 42), "No dataflow unless it exists in graph.", fill="#92400E", font=tiny_font)
+
+
+def _overview_node_security_summary(node: GraphNode, layout: OverviewLayout) -> tuple[str, str, str, str] | None:
+    if node.type not in {"service", "data_asset", "external_service"}:
+        return None
+    findings = _overview_findings_for_node(node, layout)
+    p1_count = sum(1 for finding in findings if finding.severity in {"P0", "P1"})
+    p2_count = sum(1 for finding in findings if finding.severity == "P2")
+    if p1_count:
+        color, fill = _overview_severity_colors("P1")
+        return "P1", f"P1 {p1_count}", color, fill
+    if p2_count:
+        color, fill = _overview_severity_colors("P2")
+        return "P2", f"P2 {p2_count}", color, fill
+    monitoring = _overview_monitoring_edges_for_node(node, layout)
+    if monitoring and any(_status_kind(edge.label) in {"pending", "auto"} or edge.label not in {"Covered", "Confirmed"} for edge in monitoring):
+        color, fill = _overview_severity_colors("P2")
+        return "P2", "MON", color, fill
+    return None
+
+
+def _overview_findings_for_node(node: GraphNode, layout: OverviewLayout) -> list[Finding]:
+    tokens = {node.id.lower(), node.label.lower()}
+    record_id = str(node.metadata.get("record_id", "")) if isinstance(node.metadata, dict) else ""
+    if record_id:
+        tokens.add(record_id.lower())
+    short_id = _short_node_id(node.id).lower()
+    if short_id:
+        tokens.add(short_id)
+    matches: list[Finding] = []
+    for finding in layout.findings:
+        haystack = f"{finding.sheet} {finding.row_id} {finding.field} {finding.message}".lower()
+        if any(token and token in haystack for token in tokens):
+            matches.append(finding)
+    return matches
+
+
+def _overview_monitoring_edges_for_node(node: GraphNode, layout: OverviewLayout) -> list[GraphEdge]:
+    return [edge for edge in layout.context_edges if edge.type == "monitored_by" and edge.source == node.id]
+
+
+def _overview_security_matrix(layout: OverviewLayout) -> list[dict[str, str]]:
+    service_nodes = [node for node_id, node in layout.nodes.items() if node.type == "service" and node_id in layout.positions]
+    data_asset_nodes = [node for node_id, node in layout.nodes.items() if node.type == "data_asset" and node_id in layout.positions]
+    external_nodes = [node for node_id, node in layout.nodes.items() if node.type == "external_service" and node_id in layout.positions]
+    monitored_sources = {edge.source: edge.label or "Unknown" for edge in layout.context_edges if edge.type == "monitored_by"}
+    covered = sum(1 for node in service_nodes + data_asset_nodes if monitored_sources.get(node.id) == "Covered")
+    partial = sum(1 for node in service_nodes + data_asset_nodes if monitored_sources.get(node.id) and monitored_sources.get(node.id) != "Covered")
+    missing_monitoring = max(0, len(service_nodes + data_asset_nodes) - covered - partial)
+    dependency_ids = {
+        str(edge.metadata.get("dependency_id", ""))
+        for edge in layout.main_edges
+        if isinstance(edge.metadata, dict) and str(edge.metadata.get("dependency_id", ""))
+    }
+    firewall_deps = {
+        edge.source.removeprefix("dependency:")
+        for edge in layout.context_edges
+        if edge.type == "allowed_by" and edge.source.startswith("dependency:")
+    }
+    missing_firewall = len([dep_id for dep_id in dependency_ids if dep_id not in firewall_deps])
+    iam_edges = [edge for edge in layout.context_edges if edge.type in {"uses_sa", "has_binding"}]
+    p0_p1 = sum(1 for finding in layout.findings if finding.severity in {"P0", "P1"})
+    p2 = sum(1 for finding in layout.findings if finding.severity == "P2")
+    pending_external = sum(1 for edge in layout.main_edges if edge.type == "calls_external" and _status_kind(edge.status) == "pending")
+    rows = [
+        _overview_security_matrix_row("Services", "INVENTORY", f"{len(service_nodes)} services on dataflow canvas", "Info"),
+        _overview_security_matrix_row("Dependencies", "TRACEABLE", f"{len(layout.main_edges)} rendered graph edges", "Info"),
+        _overview_security_matrix_row("Firewall", "NEEDS_REVIEW" if missing_firewall else "MAPPED", f"{len(firewall_deps)} mapped, {missing_firewall} missing", "P2" if missing_firewall else "Info"),
+        _overview_security_matrix_row("Monitoring", "NEEDS_REVIEW" if partial or missing_monitoring else "COVERED", f"{covered} covered, {partial} partial, {missing_monitoring} missing", "P2" if partial or missing_monitoring else "Info"),
+        _overview_security_matrix_row("IAM", "REVIEW" if not iam_edges else "MAPPED", f"{len(iam_edges)} identity edges", "P2" if not iam_edges else "Info"),
+        _overview_security_matrix_row("Data Assets", "INVENTORY", f"{len(data_asset_nodes)} assets in primary flow", "Info"),
+        _overview_security_matrix_row("External", "NEEDS_REVIEW" if pending_external else "INVENTORY", f"{len(external_nodes)} systems, {pending_external} pending", "P2" if pending_external else "Info"),
+        _overview_security_matrix_row("Findings", "NEEDS_FIX" if p0_p1 else "REVIEW" if p2 else "PASS", f"{p0_p1} P0/P1, {p2} P2", "P1" if p0_p1 else "P2" if p2 else "Info"),
+        _overview_security_matrix_row("Runtime", "CONTEXT", f"{len(layout.runtime_edges)} runtime links summarized", "Info"),
+        _overview_security_matrix_row("Guardrail", "ACTIVE", "No inferred dataflow/control lines", "Info"),
+    ]
+    return rows
+
+
+def _overview_security_matrix_row(category: str, status: str, detail: str, severity: str) -> dict[str, str]:
+    color, fill = _overview_severity_colors(severity)
+    return {"category": category, "status": status, "detail": detail, "color": color, "fill": fill}
+
+
+def _overview_security_ledger_items(layout: OverviewLayout) -> list[tuple[str, str, str]]:
+    items: list[tuple[str, str, str]] = []
+    for finding in sorted(layout.findings, key=lambda item: (_overview_severity_rank(item.severity), item.sheet, item.row_id, item.message)):
+        if finding.severity not in {"P0", "P1", "P2"}:
+            continue
+        label = " ".join(part for part in [finding.sheet, finding.row_id or finding.field] if part)
+        detail = finding.message or finding.suggested_action
+        items.append((label or finding.gate, "P1" if finding.severity in {"P0", "P1"} else "P2", detail))
+    if items:
+        return items
+    for row in _overview_security_matrix(layout):
+        severity = "P2" if str(row["status"]) in {"NEEDS_REVIEW", "REVIEW"} else "Info"
+        items.append((str(row["category"]), severity, str(row["detail"])))
+    return items
+
+
+def _overview_severity_rank(severity: str) -> int:
+    return {"P0": 0, "P1": 1, "P2": 2, "Info": 3}.get(severity, 4)
+
+
+def _overview_severity_colors(severity: str) -> tuple[str, str]:
+    if severity in {"P0", "P1"}:
+        return "#DC2626", "#FFF1F2"
+    if severity == "P2":
+        return "#F59E0B", "#FFF7ED"
+    return "#2563EB", "#EFF6FF"
 
 
 def _draw_overview_png_badge(draw: ImageDraw.ImageDraw, x: float, y: float, label: str, color: str, fill: str, font: ImageFont.ImageFont, text_fill: str = "#1F2937") -> None:
