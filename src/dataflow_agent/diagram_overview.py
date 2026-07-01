@@ -470,9 +470,10 @@ def _overview_edge_points(edge: GraphEdge, layout: OverviewLayout) -> list[tuple
     target_node = layout.nodes.get(edge.target)
     if edge.type == "calls_external" or (target_node and target_node.type in {"external_service", "data_asset"}):
         terminal_lane = _overview_terminal_lane_index(edge, layout)
+        terminal_side = _overview_terminal_side(edge, layout)
+        sx, sy = _overview_terminal_source_anchor(edge, layout, source, terminal_side)
         lane_y = _overview_terminal_bus_y(edge, layout, source, target, terminal_lane)
-        lane_x = sx + 42 + terminal_lane * 26
-        return [(sx, sy), (lane_x, sy), (lane_x, lane_y), (tx - 56, lane_y), (tx - 56, ty), (tx, ty)]
+        return [(sx, sy), (sx, lane_y), (tx - 56, lane_y), (tx - 56, ty), (tx, ty)]
     if target[1] > source[1] + 70:
         lane_x = sx + 42 + route_lane * 18
         route_y = ty
@@ -525,11 +526,11 @@ def _overview_route_lane(edge: GraphEdge, layout: OverviewLayout) -> int:
 
 
 def _overview_terminal_lane_index(edge: GraphEdge, layout: OverviewLayout) -> int:
-    direction = _overview_terminal_direction(edge, layout)
+    side = _overview_terminal_side(edge, layout)
     terminal_edges = [
         item
         for item in layout.main_edges
-        if _overview_terminal_direction(item, layout) == direction
+        if _overview_terminal_side(item, layout) == side
     ]
     terminal_edges.sort(
         key=lambda item: (
@@ -543,6 +544,47 @@ def _overview_terminal_lane_index(edge: GraphEdge, layout: OverviewLayout) -> in
         )
     )
     return terminal_edges.index(edge) if edge in terminal_edges else 0
+
+
+def _overview_terminal_side(edge: GraphEdge, layout: OverviewLayout) -> str:
+    direction = _overview_terminal_direction(edge, layout)
+    if direction in {"up", "same_top"}:
+        return "top"
+    if direction in {"down", "same_bottom"}:
+        return "bottom"
+    return direction
+
+
+def _overview_terminal_source_anchor(
+    edge: GraphEdge,
+    layout: OverviewLayout,
+    source: tuple[int, int],
+    side: str,
+) -> tuple[float, float]:
+    same_source_edges = [
+        item
+        for item in layout.main_edges
+        if item.source == edge.source and _overview_terminal_side(item, layout) == side
+    ]
+    same_source_edges.sort(
+        key=lambda item: (
+            _overview_terminal_lane_index(item, layout),
+            _overview_edge_type_rank(item),
+            _edge_number(item),
+            item.target,
+            item.id,
+        )
+    )
+    index = same_source_edges.index(edge) if edge in same_source_edges else 0
+    count = max(1, len(same_source_edges))
+    if count == 1:
+        offset = OVERVIEW_NODE_WIDTH * 0.52
+    else:
+        left = 54.0
+        right = OVERVIEW_NODE_WIDTH - 54.0
+        offset = left + (right - left) * index / max(1, count - 1)
+    y = source[1] if side == "top" else source[1] + OVERVIEW_NODE_HEIGHT
+    return source[0] + offset, y
 
 
 def _overview_terminal_direction(edge: GraphEdge, layout: OverviewLayout) -> str:
@@ -582,14 +624,15 @@ def _overview_terminal_bus_y(
 ) -> float:
     source_y = source[1]
     target_y = target[1]
-    direction = _overview_terminal_direction(edge, layout)
-    top_bus = min(source_y, target_y) - 38 - lane * 16
-    bottom_bus = max(source_y, target_y) + OVERVIEW_NODE_HEIGHT + 38 + lane * 16
-    if direction in {"up", "same_top"}:
-        return max(layout.main_top + 72, top_bus)
-    if direction in {"down", "same_bottom"}:
-        return min(layout.controls_top - 72, bottom_bus)
-    return max(layout.main_top + 72, min(layout.controls_top - 72, bottom_bus))
+    side = _overview_terminal_side(edge, layout)
+    top_base = layout.main_top + 72
+    bottom_base = layout.controls_top - 72
+    if side == "top":
+        return top_base + lane * 24
+    if side == "bottom":
+        return bottom_base - lane * 24
+    fallback = max(source_y, target_y) + OVERVIEW_NODE_HEIGHT + 38 + lane * 16
+    return max(top_base, min(bottom_base, fallback))
 
 
 def _overview_label_anchor(points: list[tuple[float, float]]) -> tuple[float, float]:
@@ -605,9 +648,9 @@ def _overview_label_badge_position(edge: GraphEdge, points: list[tuple[float, fl
     target = layout.positions.get(edge.target, (0, 0))
     target_node = layout.nodes.get(edge.target)
     if edge.type == "calls_external" or (target_node and target_node.type in {"external_service", "data_asset"}):
-        lane = _overview_route_lane(edge, layout)
-        vertical_shift = -46 if lane % 2 else 18
-        return label_x - 96, label_y + vertical_shift
+        incoming = _overview_edges_by_node(layout.main_edges, "target").get(edge.target, [])
+        target_port = _overview_port_offset(edge, incoming, OVERVIEW_NODE_HEIGHT, "in")
+        return target[0] - 118, target[1] + target_port - 14
     pair_edges = [item for item in layout.main_edges if item.source == edge.source and item.target == edge.target]
     pair_index = pair_edges.index(edge) if edge in pair_edges else 0
     if target[1] > source[1] + 70:

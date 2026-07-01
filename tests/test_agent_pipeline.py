@@ -40,6 +40,17 @@ def _main_dataflow_lines(svg: str) -> list[str]:
     return [line for line in lines if "main-dataflow-halo" not in line]
 
 
+def _polyline_points(line: str) -> list[tuple[float, float]]:
+    match = re.search(r'points="([^"]+)"', line)
+    if not match:
+        return []
+    points: list[tuple[float, float]] = []
+    for pair in match.group(1).split():
+        x_value, y_value = pair.split(",", 1)
+        points.append((float(x_value), float(y_value)))
+    return points
+
+
 def _script_env() -> dict[str, str]:
     import os
 
@@ -257,6 +268,19 @@ def test_overview_renderer_uses_graph_truthful_edges(tmp_path: Path) -> None:
     rendered_edge_ids = {match.group(1) for line in main_lines if (match := re.search(r'data-edge-id="([^"]+)"', line))}
     rendered_edge_types = {match.group(1) for line in main_lines if (match := re.search(r'data-edge-type="([^"]+)"', line))}
     rendered_routes = {match.group(1) for line in main_lines if (match := re.search(r'points="([^"]+)"', line))}
+    terminal_bus_y = []
+    for line in main_lines:
+        edge_type = re.search(r'data-edge-type="([^"]+)"', line)
+        if not edge_type or edge_type.group(1) not in {"calls_external", "reads_from", "writes_to"}:
+            continue
+        points = _polyline_points(line)
+        horizontal_segments = [
+            first[1]
+            for first, second in zip(points, points[1:])
+            if abs(first[1] - second[1]) < 0.01 and abs(first[0] - second[0]) > 140
+        ]
+        assert horizontal_segments
+        terminal_bus_y.append(round(horizontal_segments[0], 1))
 
     assert rendered_edge_ids >= {"edge-2000", "edge-2001", "edge-2002", "edge-2003", "edge-2004", "edge-2005"}
     assert len(main_badges) == len(main_lines)
@@ -264,6 +288,7 @@ def test_overview_renderer_uses_graph_truthful_edges(tmp_path: Path) -> None:
     assert "HTTP/JSON 8545" in overview_svg
     assert "TCP 9090" in overview_svg
     assert len(rendered_routes) == len(main_lines)
+    assert len(terminal_bus_y) == len(set(terminal_bus_y))
     assert rendered_edge_types <= {"calls", "calls_external", "reads_from", "writes_to", "depends_on"}
     assert not (rendered_edge_types & {"runs_on", "runs_on_runtime", "allowed_by", "uses_sa", "monitored_by", "protected_by"})
     assert 'data-source="prod-lb-public" data-target="svc-nginx-entry"' not in overview_svg
