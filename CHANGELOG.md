@@ -28,7 +28,6 @@
 - 总览图同步改为主数据流编号视图，安全与监控图改为逐行关系视图，避免控制类关系大量交叉堆叠。
 - 主数据流编号渲染改为先画线、再画节点、最后画编号，并将编号锚定到水平线段上，避免数字被线条覆盖。
 - 安全与监控图恢复为原始深色审计风格；编号拓扑仅保留在总览图和服务依赖图。
-- Network 图改为网络边界展示图：主画布只展示真实网络结构关系，Firewall / Cloud Armor 改为摘要面板，避免端口规则长线穿越整张图。
 
 ### Fixed
 
@@ -145,7 +144,6 @@ This file records user-visible changes to Dataflow Agent. The repository does no
 - Changed the overview layer to the same numbered main-dataflow view and changed the security / monitoring layer to a row-based relationship view to avoid dense crossing control relationships.
 - Changed numbered main-dataflow rendering to draw lines first, nodes second, and edge-number badges last, with badges anchored to horizontal edge segments so numbers are not covered by lines.
 - Restored the security and monitoring layer to the original dark audit style; numbered topology is kept only for the overview and service dependency diagrams.
-- Changed the Network diagram to a boundary view: the main canvas shows only real network structure relationships, while Firewall / Cloud Armor details move to a summary panel to avoid long port-rule lines crossing the whole diagram.
 
 ### Fixed
 
