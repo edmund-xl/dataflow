@@ -138,7 +138,7 @@ def write_package_readme(paths: RuntimePaths, metadata: dict) -> None:
         "",
         "Each layered diagram is generated as both static outputs and editable source files. SVG, PNG, and PDF are for direct reading and delivery archiving; Mermaid is for lightweight review; draw.io `.drawio` files can be opened and manually adjusted in diagrams.net; GraphML `.graphml` files can be imported into tools such as yEd, Gephi, and Cytoscape.",
         "",
-        "The overview and service dependency diagrams use numbered main-dataflow views: only real dataflow lines stay on the canvas, while ports, protocols, and source records are moved to the right-side ledger. Other layered diagrams keep the original C4 / dark audit style to preserve a stable delivery appearance.",
+        "The overview and service dependency diagrams use numbered main-dataflow views: only real dataflow lines stay on the canvas, while ports, protocols, and source records are moved to the right-side ledger. Other layered diagrams use the same light C4 architecture palette to preserve a stable delivery appearance.",
         "",
         "draw.io and GraphML are for presentation editing and tool exchange only. They are not new factual sources. If architecture relationships, boundaries, or data flows change, correct the source Excel/DCP and regenerate the delivery package.",
         "",

@@ -390,7 +390,7 @@ dataflow_package_v0.1/
   metadata.json
 ```
 
-Each `diagrams/` layer is emitted with the same base name as SVG, PNG, PDF, Mermaid debug files, draw.io editable source files, and GraphML exchange files. Regular layers use the built-in C4 architecture style, and the security and monitoring layer uses a dark audit style; SVG risk markers include accessible and machine-readable attributes. All diagrams are regenerated from workbook data and do not depend on external graph commands. draw.io and GraphML outputs are for presentation editing and tool import only; they do not replace the source workbook.
+Each `diagrams/` layer is emitted with the same base name as SVG, PNG, PDF, Mermaid debug files, draw.io editable source files, and GraphML exchange files. Regular layers, including the security and monitoring layer, use the built-in light C4 architecture style; SVG risk markers include accessible and machine-readable attributes. All diagrams are regenerated from workbook data and do not depend on external graph commands. draw.io and GraphML outputs are for presentation editing and tool import only; they do not replace the source workbook.
 
 ## 11. Open-Source License
 

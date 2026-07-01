@@ -1468,7 +1468,7 @@ def _text_width(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont)
 
 
 def _is_security_view(view: View) -> bool:
-    return view.filename == "05_security_monitoring_layer" or view.theme in {"dark", "security"}
+    return view.theme in {"dark", "security"}
 
 
 def _mmd_id(value: str) -> str:

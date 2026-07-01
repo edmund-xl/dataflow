@@ -207,8 +207,8 @@ def test_all_diagram_views_render_nonempty_files(tmp_path: Path) -> None:
     assert 'data-edge-type="allowed_by"' not in service_svg
     assert 'data-edge-type="uses_runtime"' not in service_svg
     assert "Firewall Rule" not in service_svg
-    assert "Security Review Focus" in security_svg
-    assert "#101827" in security_svg
+    assert "Structurizr/C4-style architecture view" in security_svg
+    assert "#101827" not in security_svg
     assert 'data-security-row="' not in security_svg
     drawio_edges = [cell for cell in overview_drawio.findall(".//mxCell") if cell.attrib.get("edge") == "1"]
     assert drawio_edges
