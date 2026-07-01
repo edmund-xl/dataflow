@@ -164,6 +164,7 @@ def _overview_positions(nodes: dict[str, GraphNode], edges: list[GraphEdge]) -> 
     for component in components:
         component_edges = [edge for edge in edges if edge.source in component and edge.target in component]
         levels = _overview_levels(component, component_edges)
+        _overview_push_terminal_nodes_right(levels, nodes, component_edges)
         rows_by_level: dict[int, list[str]] = {}
         for node_id in component:
             rows_by_level.setdefault(levels.get(node_id, 0), []).append(node_id)
@@ -172,10 +173,10 @@ def _overview_positions(nodes: dict[str, GraphNode], edges: list[GraphEdge]) -> 
             ids.sort(key=lambda node_id: _overview_node_sort(nodes.get(node_id)))
             max_rows = max(max_rows, len(ids))
             for row_index, node_id in enumerate(ids):
-                x = 120 + level * (OVERVIEW_NODE_WIDTH + 110)
-                y = y_cursor + row_index * (OVERVIEW_NODE_HEIGHT + 74)
+                x = 120 + level * (OVERVIEW_NODE_WIDTH + 150)
+                y = y_cursor + row_index * (OVERVIEW_NODE_HEIGHT + 104)
                 positions[node_id] = (x, y)
-        y_cursor += max_rows * (OVERVIEW_NODE_HEIGHT + 74) + 80
+        y_cursor += max_rows * (OVERVIEW_NODE_HEIGHT + 104) + 80
     return positions
 
 
@@ -220,6 +221,16 @@ def _overview_levels(component: set[str], edges: list[GraphEdge]) -> dict[str, i
         if not changed:
             break
     return levels
+
+
+def _overview_push_terminal_nodes_right(levels: dict[str, int], nodes: dict[str, GraphNode], edges: list[GraphEdge]) -> None:
+    terminal_types = {"external_service", "data_asset"}
+    for edge in edges:
+        target = nodes.get(edge.target)
+        if not target or target.type not in terminal_types:
+            continue
+        if edge.source in levels:
+            levels[edge.target] = max(levels.get(edge.target, 0), levels[edge.source] + 2)
 
 
 def _overview_node_sort(node: GraphNode | None) -> tuple[int, str]:
@@ -321,9 +332,11 @@ def _append_overview_svg_edge(lines: list[str], edge: GraphEdge, layout: Overvie
     risk = _edge_risk_level(edge)
     label = _overview_edge_display_label(edge, layout)
     label_x, label_y = _overview_label_anchor(points)
+    edge_number = layout.main_edges.index(edge) + 1 if edge in layout.main_edges else 0
     lines.append(f'<g role="img" aria-label="{xml_escape(_edge_accessible_label(edge))}" data-risk-level="{risk}">')
     lines.append(f'<title>{xml_escape(_edge_accessible_label(edge))}</title>')
-    lines.append(f'<polyline points="{point_text}" fill="none" stroke="{color}" stroke-width="{_overview_edge_width(edge)}" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#{marker})"{dash} data-overview-role="main-dataflow" data-edge-id="{xml_escape(edge.id)}" data-edge-type="{xml_escape(edge.type)}" data-source="{xml_escape(edge.source)}" data-target="{xml_escape(edge.target)}"/>')
+    lines.append(f'<polyline points="{point_text}" fill="none" stroke="#FFFFFF" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round" data-overview-role="main-dataflow-halo" data-edge-id="{xml_escape(edge.id)}" data-edge-number="E{edge_number}"/>')
+    lines.append(f'<polyline points="{point_text}" fill="none" stroke="{color}" stroke-width="{_overview_edge_width(edge)}" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#{marker})"{dash} data-overview-role="main-dataflow" data-edge-id="{xml_escape(edge.id)}" data-edge-number="E{edge_number}" data-edge-type="{xml_escape(edge.type)}" data-source="{xml_escape(edge.source)}" data-target="{xml_escape(edge.target)}"/>')
     lines.append(f'<circle cx="{label_x}" cy="{label_y}" r="6" fill="{color}"/>')
     badge_x, badge_y = _overview_label_badge_position(edge, points, layout)
     _append_overview_svg_badge(lines, badge_x, badge_y, label, color, _overview_edge_label_fill(edge), "main-dataflow-label", edge)
@@ -430,7 +443,8 @@ def _append_overview_svg_badge(lines: list[str], x: float, y: float, label: str,
     width = max(66, min(220, len(label) * 7 + 34))
     edge_attrs = ""
     if edge:
-        edge_attrs = f' data-edge-id="{xml_escape(edge.id)}" data-edge-type="{xml_escape(edge.type)}" data-source="{xml_escape(edge.source)}" data-target="{xml_escape(edge.target)}"'
+        badge_attr = f' data-edge-badge-id="{xml_escape(edge.id)}"' if role == "main-dataflow-label" else ""
+        edge_attrs = f'{badge_attr} data-edge-id="{xml_escape(edge.id)}" data-edge-type="{xml_escape(edge.type)}" data-source="{xml_escape(edge.source)}" data-target="{xml_escape(edge.target)}"'
     lines.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{width}" height="28" rx="14" fill="{fill}" stroke="{color}" stroke-width="1.5" data-overview-role="{role}"{edge_attrs}/>')
     lines.append(f'<circle cx="{x + 13:.1f}" cy="{y + 14:.1f}" r="4" fill="{color}"/>')
     lines.append(f'<text x="{x + 24:.1f}" y="{y + 19:.1f}" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" fill="#1F2937">{xml_escape(_clip(label, 30))}</text>')
@@ -441,24 +455,108 @@ def _overview_edge_points(edge: GraphEdge, layout: OverviewLayout) -> list[tuple
     target = layout.positions.get(edge.target)
     if not source or not target:
         return []
-    pair_edges = [item for item in layout.main_edges if item.source == edge.source and item.target == edge.target]
-    pair_index = pair_edges.index(edge) if edge in pair_edges else 0
-    offset = (pair_index - (len(pair_edges) - 1) / 2) * 24
+    outgoing = _overview_edges_by_node(layout.main_edges, "source")
+    incoming = _overview_edges_by_node(layout.main_edges, "target")
+    source_port = _overview_port_offset(edge, outgoing.get(edge.source, []), OVERVIEW_NODE_HEIGHT, "out")
+    target_port = _overview_port_offset(edge, incoming.get(edge.target, []), OVERVIEW_NODE_HEIGHT, "in")
+    route_lane = _overview_route_lane(edge, layout)
     sx = source[0] + OVERVIEW_NODE_WIDTH
-    sy = source[1] + OVERVIEW_NODE_HEIGHT * 0.52 + offset
+    sy = source[1] + source_port
     tx = target[0]
-    ty = target[1] + OVERVIEW_NODE_HEIGHT * 0.52 + offset
+    ty = target[1] + target_port
+    source_rank = _overview_node_lane_rank(edge.source, layout)
+    target_rank = _overview_node_lane_rank(edge.target, layout)
+    target_node = layout.nodes.get(edge.target)
+    if edge.type == "calls_external" or (target_node and target_node.type in {"external_service", "data_asset"}):
+        lane_y = _overview_terminal_bus_y(edge, layout, source, target, route_lane)
+        lane_x = sx + 42 + route_lane * 26
+        return [(sx, sy), (lane_x, sy), (lane_x, lane_y), (tx - 56, lane_y), (tx - 56, ty), (tx, ty)]
     if target[1] > source[1] + 70:
-        sy = source[1] + OVERVIEW_NODE_HEIGHT * 0.76 + offset
-        route_y = target[1] + OVERVIEW_NODE_HEIGHT * 0.52 + offset
-        return [(sx, sy), (sx + 52, sy), (sx + 52, route_y), (tx, route_y)]
+        lane_x = sx + 42 + route_lane * 18
+        route_y = ty
+        return [(sx, sy), (lane_x, sy), (lane_x, route_y), (tx, route_y)]
     if sx <= tx:
-        if abs(sy - ty) < 18:
-            return [(sx, sy), (tx, ty)]
-        mid_x = sx + max(48, (tx - sx) * 0.48)
-        return [(sx, sy), (mid_x, sy), (mid_x, ty), (tx, ty)]
-    route_y = max(sy, ty) + 70
-    return [(sx, sy), (sx + 60, sy), (sx + 60, route_y), (tx - 60, route_y), (tx - 60, ty), (tx, ty)]
+        distance = max(1, tx - sx)
+        lane_x = sx + min(max(54, distance * 0.34), distance - 34 if distance > 88 else distance * 0.5) + route_lane * 16
+        lane_x = min(max(sx + 34, lane_x), tx - 34 if tx - sx > 76 else sx + distance / 2)
+        if abs(sy - ty) < 10:
+            elbow_y = sy + (route_lane - 1) * 16
+            return [(sx, sy), (lane_x, sy), (lane_x, elbow_y), (tx, elbow_y), (tx, ty)]
+        return [(sx, sy), (lane_x, sy), (lane_x, ty), (tx, ty)]
+    outer_x = max(source[0], target[0]) + OVERVIEW_NODE_WIDTH + 58 + route_lane * 24
+    route_y = max(sy, ty) + 48 + abs(target_rank - source_rank) * 10
+    return [(sx, sy), (outer_x, sy), (outer_x, route_y), (tx - 52, route_y), (tx - 52, ty), (tx, ty)]
+
+
+def _overview_edges_by_node(edges: list[GraphEdge], side: str) -> dict[str, list[GraphEdge]]:
+    grouped: dict[str, list[GraphEdge]] = {}
+    for edge in edges:
+        key = edge.source if side == "source" else edge.target
+        grouped.setdefault(key, []).append(edge)
+    for node_edges in grouped.values():
+        node_edges.sort(key=lambda item: (_overview_edge_type_rank(item), _edge_number(item), item.source, item.target, item.id))
+    return grouped
+
+
+def _overview_port_offset(edge: GraphEdge, node_edges: list[GraphEdge], node_height: int, side: str) -> float:
+    if not node_edges:
+        return node_height * 0.52
+    count = len(node_edges)
+    if count == 1:
+        return node_height * 0.52
+    top = 26.0
+    bottom = node_height - 24.0
+    index = node_edges.index(edge) if edge in node_edges else 0
+    if side == "in":
+        index = min(count - 1, max(0, index))
+    return top + (bottom - top) * index / max(1, count - 1)
+
+
+def _overview_route_lane(edge: GraphEdge, layout: OverviewLayout) -> int:
+    same_source = [item for item in layout.main_edges if item.source == edge.source]
+    same_target = [item for item in layout.main_edges if item.target == edge.target]
+    same_pair = [item for item in layout.main_edges if item.source == edge.source and item.target == edge.target]
+    source_index = same_source.index(edge) if edge in same_source else 0
+    target_index = same_target.index(edge) if edge in same_target else 0
+    pair_index = same_pair.index(edge) if edge in same_pair else 0
+    return (_overview_edge_type_rank(edge) + source_index * 2 + target_index + pair_index) % 5
+
+
+def _overview_node_lane_rank(node_id: str, layout: OverviewLayout) -> int:
+    position = layout.positions.get(node_id)
+    if not position:
+        return 0
+    return int(position[1] // max(1, OVERVIEW_NODE_HEIGHT + 74))
+
+
+def _overview_edge_type_rank(edge: GraphEdge) -> int:
+    return {"calls": 0, "depends_on": 1, "calls_external": 2, "writes_to": 3, "reads_from": 4}.get(edge.type, 5)
+
+
+def _overview_terminal_bus_y(
+    edge: GraphEdge,
+    layout: OverviewLayout,
+    source: tuple[int, int],
+    target: tuple[int, int],
+    lane: int,
+) -> float:
+    source_y = source[1]
+    target_y = target[1]
+    if abs(target_y - source_y) < OVERVIEW_NODE_HEIGHT:
+        above = source_y - 34 - lane * 16
+        below = source_y + OVERVIEW_NODE_HEIGHT + 34 + lane * 16
+        if above > layout.main_top + 72:
+            return above
+        return below
+    if target_y > source_y + OVERVIEW_NODE_HEIGHT:
+        return max(source_y + OVERVIEW_NODE_HEIGHT + 34 + lane * 16, target_y - 42)
+    if target_y + OVERVIEW_NODE_HEIGHT < source_y:
+        return min(source_y - 34 - lane * 16, target_y + OVERVIEW_NODE_HEIGHT + 42)
+    if edge.type == "calls_external":
+        return source_y + OVERVIEW_NODE_HEIGHT + 34 + lane * 16
+    if edge.type in {"reads_from", "writes_to"}:
+        return target_y + OVERVIEW_NODE_HEIGHT + 34 + lane * 16
+    return max(source_y, target_y) + OVERVIEW_NODE_HEIGHT + 34 + lane * 16
 
 
 def _overview_label_anchor(points: list[tuple[float, float]]) -> tuple[float, float]:
@@ -472,6 +570,11 @@ def _overview_label_badge_position(edge: GraphEdge, points: list[tuple[float, fl
     label_x, label_y = _overview_label_anchor(points)
     source = layout.positions.get(edge.source, (0, 0))
     target = layout.positions.get(edge.target, (0, 0))
+    target_node = layout.nodes.get(edge.target)
+    if edge.type == "calls_external" or (target_node and target_node.type in {"external_service", "data_asset"}):
+        lane = _overview_route_lane(edge, layout)
+        vertical_shift = -46 if lane % 2 else 18
+        return label_x - 96, label_y + vertical_shift
     pair_edges = [item for item in layout.main_edges if item.source == edge.source and item.target == edge.target]
     pair_index = pair_edges.index(edge) if edge in pair_edges else 0
     if target[1] > source[1] + 70:
@@ -670,6 +773,7 @@ def _draw_overview_png_edge(draw: ImageDraw.ImageDraw, edge: GraphEdge, layout: 
     if not points:
         return
     color = _overview_edge_color(edge)
+    _draw_png_polyline_with_arrow(draw, points, "#FFFFFF", 10, False)
     _draw_png_polyline_with_arrow(draw, points, color, int(float(_overview_edge_width(edge))), _status_kind(edge.status) == "pending")
     label_x, label_y = _overview_label_anchor(points)
     badge_x, badge_y = _overview_label_badge_position(edge, points, layout)

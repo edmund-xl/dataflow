@@ -144,11 +144,10 @@ def render_diagrams(graph: GraphModel, diagrams_dir: Path) -> list[Path]:
     for view in VIEWS:
         nodes, edges = _select_view(graph, view)
         if view.filename in {"00_overview", "03_service_dependency_layer"}:
-            nodes, edges = _select_service_dependency_main_flow(graph)
-            positions = _service_dependency_layout(nodes, edges)
-            outputs.append(_write_service_dependency_svg(diagrams_dir / f"{view.filename}.svg", view, nodes, edges, positions))
-            outputs.append(_write_service_dependency_png(diagrams_dir / f"{view.filename}.png", view, nodes, edges, positions))
-            outputs.append(_write_service_dependency_pdf(diagrams_dir / f"{view.filename}.pdf", view, nodes, edges, positions))
+            from .diagram_overview import render_overview_outputs
+
+            outputs.extend(render_overview_outputs(graph, diagrams_dir, view))
+            continue
         else:
             positions = _layout(nodes)
             outputs.append(_write_svg(diagrams_dir / f"{view.filename}.svg", view, nodes, edges, positions))

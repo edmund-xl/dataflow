@@ -6,7 +6,9 @@
 
 ## Unreleased
 
-暂无未发布变更。
+### Changed
+
+- 总览图和服务依赖图统一为“入口上下文 + 主数据流 + 控制摘要 + edge ledger”的信息丰富视图，并增强主数据流的分 lane 正交路由、线条 halo、编号标签和 ledger 回溯能力。
 
 ## 0.1.1 - 2026-07-01
 
@@ -128,7 +130,9 @@ This file records user-visible changes to Dataflow Agent. Historical development
 
 ## Unreleased
 
-No unreleased changes.
+### Changed
+
+- Unified the overview and service dependency diagrams around the information-rich entry-context, primary-dataflow, control-summary, and edge-ledger view, with stronger lane-based orthogonal routing, line halos, numbered labels, and ledger traceability for primary dataflow lines.
 
 ## 0.1.1 - 2026-07-01
 

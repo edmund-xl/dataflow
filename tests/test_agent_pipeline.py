@@ -35,6 +35,11 @@ CLEAN_SAMPLE_DCP = ROOT / "samples" / "DCP_clean_v0.1"
 CLEAN_SAMPLE_WORKBOOK = CLEAN_SAMPLE_DCP / "dataflow_collection_template_v0.1.xlsx"
 
 
+def _main_dataflow_lines(svg: str) -> list[str]:
+    lines = re.findall(r'<polyline[^>]+data-overview-role="main-dataflow"[^>]+', svg)
+    return [line for line in lines if "main-dataflow-halo" not in line]
+
+
 def _script_env() -> dict[str, str]:
     import os
 
@@ -213,13 +218,18 @@ def test_all_diagram_views_render_nonempty_files(tmp_path: Path) -> None:
     overview_drawio = ElementTree.parse(tmp_path / "00_overview.drawio")
     overview_graphml = ElementTree.parse(tmp_path / "00_overview.graphml")
     legacy = "mega" + "eth"
-    assert "Main dataflow view with numbered edges" in overview_svg
-    assert "Edge ledger" in overview_svg
+    for svg in (overview_svg, service_svg):
+        assert "Entry context / perimeter control" in svg
+        assert "Primary graph dataflow" in svg
+        assert "Controls and runtime summary" in svg
+        assert "Graph edge ledger" in svg
+        assert "Semantic guardrail" in svg
+        assert 'data-overview-role="main-dataflow-halo"' in svg
+        assert 'data-overview-role="main-dataflow"' in svg
+        assert 'data-edge-number="E' in svg
     assert "Subnet" not in overview_svg
-    assert "Edge ledger" in service_svg
-    assert 'data-edge-number="' in service_svg
-    assert 'data-edge-type="allowed_by"' not in service_svg
-    assert 'data-edge-type="uses_runtime"' not in service_svg
+    assert 'data-edge-type="allowed_by"' not in _main_dataflow_lines(service_svg)
+    assert 'data-edge-type="uses_runtime"' not in _main_dataflow_lines(service_svg)
     assert "Firewall Rule" not in service_svg
     assert "Structurizr/C4-style architecture view" in security_svg
     assert "#101827" not in security_svg
@@ -241,18 +251,20 @@ def test_overview_renderer_uses_graph_truthful_edges(tmp_path: Path) -> None:
     render_diagrams(graph, tmp_path)
 
     overview_svg = (tmp_path / "00_overview.svg").read_text(encoding="utf-8")
-    main_lines = re.findall(r'<polyline[^>]+data-edge-number="[^"]+"[^>]+', overview_svg)
+    main_lines = _main_dataflow_lines(overview_svg)
     main_badges = re.findall(r'data-edge-badge-id="[^"]+"', overview_svg)
     rendered_edge_ids = {match.group(1) for line in main_lines if (match := re.search(r'data-edge-id="([^"]+)"', line))}
     rendered_edge_types = {match.group(1) for line in main_lines if (match := re.search(r'data-edge-type="([^"]+)"', line))}
+    rendered_routes = {match.group(1) for line in main_lines if (match := re.search(r'points="([^"]+)"', line))}
 
     assert rendered_edge_ids >= {"edge-2000", "edge-2001", "edge-2002", "edge-2003", "edge-2004", "edge-2005"}
     assert len(main_badges) == len(main_lines)
+    assert len(rendered_routes) == len(main_lines)
     assert rendered_edge_types <= {"calls", "calls_external", "reads_from", "writes_to", "depends_on"}
     assert not (rendered_edge_types & {"runs_on", "runs_on_runtime", "allowed_by", "uses_sa", "monitored_by", "protected_by"})
     assert 'data-source="prod-lb-public" data-target="svc-nginx-entry"' not in overview_svg
-    assert 'data-edge-type="allowed_by"' not in overview_svg
-    assert 'data-edge-type="uses_sa"' not in overview_svg
+    assert 'data-edge-type="allowed_by"' not in "\n".join(main_lines)
+    assert 'data-edge-type="uses_sa"' not in "\n".join(main_lines)
 
 
 def test_diagrams_show_non_final_statuses(tmp_path: Path) -> None:
