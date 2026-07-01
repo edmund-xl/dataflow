@@ -6,6 +6,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from reportlab.pdfgen import canvas
 
+from .editable_exporter import write_editable_outputs
 from .models import GraphEdge, GraphModel, GraphNode
 from .util import xml_escape
 from .diagram_renderer import (
@@ -40,12 +41,25 @@ LEFT_MARGIN = 72
 
 def render_overview_outputs(graph: GraphModel, diagrams_dir: Path, view: View) -> list[Path]:
     layout = _overview_layout(graph)
-    return [
+    visible_nodes = [node for node_id, node in layout.nodes.items() if node_id in layout.positions]
+    outputs = [
         _write_overview_svg(diagrams_dir / f"{view.filename}.svg", view, layout),
         _write_overview_png(diagrams_dir / f"{view.filename}.png", view, layout),
         _write_overview_pdf(diagrams_dir / f"{view.filename}.pdf", view, layout),
         _write_overview_mermaid(diagrams_dir / f"{view.filename}.mmd", view, layout),
     ]
+    outputs.extend(
+        write_editable_outputs(
+            diagrams_dir / view.filename,
+            view.title,
+            visible_nodes,
+            layout.main_edges,
+            layout.positions,
+            node_width=OVERVIEW_NODE_WIDTH,
+            node_height=OVERVIEW_NODE_HEIGHT,
+        )
+    )
+    return outputs
 
 
 @dataclass(frozen=True)

@@ -8,6 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 from reportlab.lib.pagesizes import landscape, letter
 from reportlab.pdfgen import canvas
 
+from .editable_exporter import write_editable_outputs
 from .models import GraphEdge, GraphModel, GraphNode
 from .util import safe_id, xml_escape
 
@@ -148,6 +149,17 @@ def render_diagrams(graph: GraphModel, diagrams_dir: Path) -> list[Path]:
         outputs.append(_write_png(diagrams_dir / f"{view.filename}.png", view, nodes, edges, positions))
         outputs.append(_write_pdf(diagrams_dir / f"{view.filename}.pdf", view, nodes, edges, positions))
         outputs.append(_write_mermaid(diagrams_dir / f"{view.filename}.mmd", view, nodes, edges))
+        outputs.extend(
+            write_editable_outputs(
+                diagrams_dir / view.filename,
+                view.title,
+                nodes,
+                edges,
+                positions,
+                node_width=NODE_WIDTH,
+                node_height=NODE_HEIGHT,
+            )
+        )
     return outputs
 
 
@@ -175,6 +187,15 @@ def render_service_drilldown(
         _write_png(diagrams_dir / f"{base}.png", view, nodes, edges, positions),
         _write_pdf(diagrams_dir / f"{base}.pdf", view, nodes, edges, positions),
         _write_mermaid(diagrams_dir / f"{base}.mmd", view, nodes, edges),
+        *write_editable_outputs(
+            diagrams_dir / base,
+            view.title,
+            nodes,
+            edges,
+            positions,
+            node_width=NODE_WIDTH,
+            node_height=NODE_HEIGHT,
+        ),
     ]
 
 
