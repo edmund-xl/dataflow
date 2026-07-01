@@ -28,7 +28,7 @@
 - 总览图同步改为主数据流编号视图，安全与监控图改为逐行关系视图，避免控制类关系大量交叉堆叠。
 - 主数据流编号渲染改为先画线、再画节点、最后画编号，并将编号锚定到水平线段上，避免数字被线条覆盖。
 - 安全与监控图改为与其他普通分层图一致的浅色 C4 配色；编号拓扑仅保留在总览图和服务依赖图。
-- 新增 `architecture_findings.md` 架构问题分析报告，直接基于 Excel/DCP 生成的 graph model、校验结果和风险结果列出真实数据流链路、问题分组和源表修复位置。
+- 新增 `architecture_findings.md` 架构问题分析报告，直接基于 Excel/DCP 生成的 graph model、校验结果和风险结果列出真实数据流链路、问题分组、审查观察项和源表修复位置。
 
 ### Fixed
 
@@ -145,7 +145,7 @@ This file records user-visible changes to Dataflow Agent. The repository does no
 - Changed the overview layer to the same numbered main-dataflow view and changed the security / monitoring layer to a row-based relationship view to avoid dense crossing control relationships.
 - Changed numbered main-dataflow rendering to draw lines first, nodes second, and edge-number badges last, with badges anchored to horizontal edge segments so numbers are not covered by lines.
 - Changed the security and monitoring layer to the same light C4 palette used by the other regular layered diagrams; numbered topology is kept only for the overview and service dependency diagrams.
-- Added the `architecture_findings.md` architecture findings report, which lists real dataflow paths, finding groups, and source-sheet fix locations directly from the graph model, validation findings, and risk findings generated from the Excel/DCP source.
+- Added the `architecture_findings.md` architecture findings report, which lists real dataflow paths, finding groups, review observations, and source-sheet fix locations directly from the graph model, validation findings, and risk findings generated from the Excel/DCP source.
 
 ### Fixed
 

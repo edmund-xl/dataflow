@@ -14,6 +14,7 @@ import pytest
 from docx import Document
 from openpyxl import load_workbook
 
+from dataflow_agent.architecture_findings import write_architecture_findings
 from dataflow_agent.constants import find_workbook
 from dataflow_agent.diagram_renderer import VIEWS, render_diagrams, render_service_drilldown
 from dataflow_agent.graph_builder import build_graph
@@ -665,6 +666,40 @@ def test_generated_docs_are_chinese_first_then_english(tmp_path: Path) -> None:
     assert architecture_findings.index("# 中文版本") < architecture_findings.index("# English Version")
     assert "| Edge_ID | 类型 | 来源 | 目标 | 状态 | 来源记录 | Evidence_ID |" in architecture_findings
     assert "不存在的关系不会被补画或补写" in architecture_findings
+
+
+def test_architecture_findings_include_review_observations(tmp_path: Path) -> None:
+    schema = load_schema()
+    workbook = normalize_workbook(read_workbook(CLEAN_SAMPLE_WORKBOOK, schema), schema)
+    workbook.sheets["09_IAM_SA"] = []
+
+    firewall = workbook.sheets["07_Firewalls"][0]
+    firewall["Firewall_ID"] = "fw-wide-admin"
+    firewall["Direction"] = "ingress"
+    firewall["Source_Allowed"] = "0.0.0.0/0"
+    firewall["Ports"] = "22"
+    firewall["Reason"] = "SSH admin temporary exception"
+    firewall["Confirmation_Status"] = "Accepted_Exception"
+
+    for row in workbook.sheets["10_Monitoring"]:
+        row["Coverage_Status"] = "Partial"
+        row["Dashboard_URL"] = ""
+        row["Alert_Rule"] = "Not confirmed in repo"
+        row["XDR_Coverage"] = "Unknown"
+
+    graph = build_graph(workbook)
+    output = tmp_path / "architecture_findings.md"
+    write_architecture_findings(output, workbook, graph, [], [])
+    content = output.read_text(encoding="utf-8")
+
+    assert "## 审查观察项" in content
+    assert "P0 服务共" in content
+    assert "fw-wide-admin" in content
+    assert "0.0.0.0/0" in content
+    assert "Partial=" in content
+    assert "Alert_Rule 未确认" in content
+    assert "当前没有 IAM / Service Account 记录" in content
+    assert "No IAM / Service Account records are present" in content
 
 
 def test_devops_docs_and_deterministic_agent_boundary_are_documented() -> None:
