@@ -194,6 +194,7 @@ def test_all_diagram_views_render_nonempty_files(tmp_path: Path) -> None:
         assert path.stat().st_size > 100
 
     overview_svg = (tmp_path / "00_overview.svg").read_text(encoding="utf-8")
+    network_svg = (tmp_path / "01_network_layer.svg").read_text(encoding="utf-8")
     service_svg = (tmp_path / "03_service_dependency_layer.svg").read_text(encoding="utf-8")
     security_svg = (tmp_path / "05_security_monitoring_layer.svg").read_text(encoding="utf-8")
     overview_drawio = ElementTree.parse(tmp_path / "00_overview.drawio")
@@ -202,6 +203,18 @@ def test_all_diagram_views_render_nonempty_files(tmp_path: Path) -> None:
     assert "Main dataflow view with numbered edges" in overview_svg
     assert "Edge ledger" in overview_svg
     assert "Subnet" not in overview_svg
+    assert "Network boundary view" in network_svg
+    assert "Network Controls Summary" in network_svg
+    assert "Gcp Project" in network_svg
+    assert "Subnet" in network_svg
+    assert "Nat" in network_svg
+    assert "Server" in network_svg
+    assert "dependency_ref" not in network_svg
+    assert 'data-edge-type="allowed_by"' not in network_svg
+    assert 'data-edge-type="contains"' in network_svg
+    assert "FW-" in network_svg
+    assert "ports:" in network_svg
+    assert 'data-source="prod-lb-public" data-target="svc-nginx-entry"' not in network_svg
     assert "Edge ledger" in service_svg
     assert 'data-edge-number="' in service_svg
     assert 'data-edge-type="allowed_by"' not in service_svg
