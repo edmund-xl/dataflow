@@ -81,6 +81,14 @@ class OverviewLayout:
     all_edges: list[GraphEdge]
 
 
+@dataclass(frozen=True)
+class OverviewLineBridge:
+    x: float
+    y: float
+    color: str
+    edge_id: str
+
+
 def _overview_layout(graph: GraphModel) -> OverviewLayout:
     main_edges = _overview_main_edges(graph.edges)
     positions = _overview_positions(graph.nodes, main_edges)
@@ -263,6 +271,7 @@ def _write_overview_svg(path: Path, view: View, layout: OverviewLayout) -> Path:
     _append_overview_svg_perimeter(lines, layout)
     for edge in layout.main_edges:
         _append_overview_svg_edge(lines, edge, layout)
+    _append_overview_svg_bridges(lines, layout)
     for node_id, position in layout.positions.items():
         node = layout.nodes.get(node_id)
         if node:
@@ -341,6 +350,25 @@ def _append_overview_svg_edge(lines: list[str], edge: GraphEdge, layout: Overvie
     badge_x, badge_y = _overview_label_badge_position(edge, points, layout)
     _append_overview_svg_badge(lines, badge_x, badge_y, label, color, _overview_edge_label_fill(edge), "main-dataflow-label", edge)
     lines.append(f'<polyline points="{label_x},{label_y} {label_x},{badge_y + 14}" fill="none" stroke="{color}" stroke-width="1.2" stroke-linecap="round"/>')
+    lines.append("</g>")
+
+
+def _append_overview_svg_bridges(lines: list[str], layout: OverviewLayout) -> None:
+    bridges = _overview_line_bridges(layout)
+    if not bridges:
+        return
+    lines.append('<g data-overview-role="line-bridges" aria-label="Line crossing bridges">')
+    for bridge in bridges:
+        radius = 9
+        rise = 7
+        x = bridge.x
+        y = bridge.y
+        lines.append(
+            f'<line x1="{x - radius:.1f}" y1="{y:.1f}" x2="{x + radius:.1f}" y2="{y:.1f}" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" data-overview-role="line-bridge-gap" data-edge-id="{xml_escape(bridge.edge_id)}"/>'
+        )
+        lines.append(
+            f'<path d="M{x - radius:.1f},{y:.1f} Q{x:.1f},{y - rise:.1f} {x + radius:.1f},{y:.1f}" fill="none" stroke="{bridge.color}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" data-overview-role="line-bridge" data-edge-id="{xml_escape(bridge.edge_id)}"/>'
+        )
     lines.append("</g>")
 
 
@@ -489,6 +517,73 @@ def _overview_edge_points(edge: GraphEdge, layout: OverviewLayout) -> list[tuple
     outer_x = max(source[0], target[0]) + OVERVIEW_NODE_WIDTH + 58 + route_lane * 24
     route_y = max(sy, ty) + 48 + abs(target_rank - source_rank) * 10
     return [(sx, sy), (outer_x, sy), (outer_x, route_y), (tx - 52, route_y), (tx - 52, ty), (tx, ty)]
+
+
+def _overview_line_bridges(layout: OverviewLayout) -> list[OverviewLineBridge]:
+    edge_points = [(edge, _overview_edge_points(edge, layout)) for edge in layout.main_edges]
+    bridges: list[OverviewLineBridge] = []
+    seen: set[tuple[str, float, float]] = set()
+    for left_index, (left_edge, left_points) in enumerate(edge_points):
+        for right_edge, right_points in edge_points[left_index + 1 :]:
+            for left_start, left_end in zip(left_points, left_points[1:]):
+                left_orientation = _overview_segment_orientation(left_start, left_end)
+                if left_orientation not in {"horizontal", "vertical"}:
+                    continue
+                for right_start, right_end in zip(right_points, right_points[1:]):
+                    right_orientation = _overview_segment_orientation(right_start, right_end)
+                    if {left_orientation, right_orientation} != {"horizontal", "vertical"}:
+                        continue
+                    crossing = _overview_segment_crossing(left_start, left_end, right_start, right_end)
+                    if not crossing:
+                        continue
+                    horizontal_edge = left_edge if left_orientation == "horizontal" else right_edge
+                    key = (horizontal_edge.id, round(crossing[0], 1), round(crossing[1], 1))
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    bridges.append(
+                        OverviewLineBridge(
+                            x=crossing[0],
+                            y=crossing[1],
+                            color=_overview_edge_color(horizontal_edge),
+                            edge_id=horizontal_edge.id,
+                        )
+                    )
+    return bridges
+
+
+def _overview_segment_orientation(start: tuple[float, float], end: tuple[float, float]) -> str:
+    if abs(start[1] - end[1]) < 0.01 and abs(start[0] - end[0]) > 1:
+        return "horizontal"
+    if abs(start[0] - end[0]) < 0.01 and abs(start[1] - end[1]) > 1:
+        return "vertical"
+    return "other"
+
+
+def _overview_segment_crossing(
+    first_start: tuple[float, float],
+    first_end: tuple[float, float],
+    second_start: tuple[float, float],
+    second_end: tuple[float, float],
+) -> tuple[float, float] | None:
+    first_orientation = _overview_segment_orientation(first_start, first_end)
+    second_orientation = _overview_segment_orientation(second_start, second_end)
+    if first_orientation == "horizontal" and second_orientation == "vertical":
+        horizontal_start, horizontal_end = first_start, first_end
+        vertical_start, vertical_end = second_start, second_end
+    elif first_orientation == "vertical" and second_orientation == "horizontal":
+        horizontal_start, horizontal_end = second_start, second_end
+        vertical_start, vertical_end = first_start, first_end
+    else:
+        return None
+    hx1, hx2 = sorted((horizontal_start[0], horizontal_end[0]))
+    vy1, vy2 = sorted((vertical_start[1], vertical_end[1]))
+    x = vertical_start[0]
+    y = horizontal_start[1]
+    margin = 10
+    if hx1 + margin < x < hx2 - margin and vy1 + margin < y < vy2 - margin:
+        return x, y
+    return None
 
 
 def _overview_edges_by_node(edges: list[GraphEdge], side: str) -> dict[str, list[GraphEdge]]:
@@ -800,6 +895,7 @@ def _write_overview_png(path: Path, view: View, layout: OverviewLayout) -> Path:
     _draw_overview_png_perimeter(draw, layout, label_font, small_font, tiny_font)
     for edge in layout.main_edges:
         _draw_overview_png_edge(draw, edge, layout, small_font)
+    _draw_overview_png_bridges(draw, layout)
     for node_id, (x, y) in layout.positions.items():
         node = layout.nodes.get(node_id)
         if node:
@@ -859,6 +955,23 @@ def _draw_overview_png_edge(draw: ImageDraw.ImageDraw, edge: GraphEdge, layout: 
     draw.ellipse((label_x - 6, label_y - 6, label_x + 6, label_y + 6), fill=color)
     draw.line((label_x, label_y, label_x, badge_y + 14), fill=color, width=1)
     _draw_overview_png_badge(draw, badge_x, badge_y, _overview_edge_display_label(edge, layout), color, _overview_edge_label_fill(edge), font)
+
+
+def _draw_overview_png_bridges(draw: ImageDraw.ImageDraw, layout: OverviewLayout) -> None:
+    for bridge in _overview_line_bridges(layout):
+        x = bridge.x
+        y = bridge.y
+        radius = 9
+        rise = 7
+        draw.line((x - radius, y, x + radius, y), fill="#FFFFFF", width=10)
+        points = [
+            (x - radius, y),
+            (x - radius / 2, y - rise * 0.75),
+            (x, y - rise),
+            (x + radius / 2, y - rise * 0.75),
+            (x + radius, y),
+        ]
+        draw.line(points, fill=bridge.color, width=3, joint="curve")
 
 
 def _draw_overview_png_node(draw: ImageDraw.ImageDraw, node: GraphNode, x: int, y: int, label_font: ImageFont.ImageFont, small_font: ImageFont.ImageFont, tiny_font: ImageFont.ImageFont) -> None:

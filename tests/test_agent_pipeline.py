@@ -296,6 +296,14 @@ def test_overview_renderer_uses_graph_truthful_edges(tmp_path: Path) -> None:
     assert 'data-edge-type="uses_sa"' not in "\n".join(main_lines)
 
 
+def test_overview_line_bridge_detects_orthogonal_crossing() -> None:
+    from dataflow_agent.diagram_overview import _overview_segment_crossing
+
+    assert _overview_segment_crossing((10, 30), (90, 30), (50, 10), (50, 80)) == (50, 30)
+    assert _overview_segment_crossing((10, 30), (90, 30), (90, 10), (90, 80)) is None
+    assert _overview_segment_crossing((10, 30), (90, 30), (20, 30), (80, 30)) is None
+
+
 def test_diagrams_show_non_final_statuses(tmp_path: Path) -> None:
     schema = load_schema()
     workbook = read_workbook(SAMPLE_WORKBOOK, schema)
