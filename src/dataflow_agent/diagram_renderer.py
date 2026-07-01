@@ -142,23 +142,14 @@ def render_diagrams(graph: GraphModel, diagrams_dir: Path) -> list[Path]:
     diagrams_dir.mkdir(parents=True, exist_ok=True)
     outputs: list[Path] = []
     for view in VIEWS:
-        nodes, edges = _select_view(graph, view)
         if view.filename in {"00_overview", "03_service_dependency_layer"}:
             nodes, edges = _select_service_dependency_main_flow(graph)
-            positions = _service_dependency_layout(nodes, edges)
-            outputs.append(_write_service_dependency_svg(diagrams_dir / f"{view.filename}.svg", view, nodes, edges, positions))
-            outputs.append(_write_service_dependency_png(diagrams_dir / f"{view.filename}.png", view, nodes, edges, positions))
-            outputs.append(_write_service_dependency_pdf(diagrams_dir / f"{view.filename}.pdf", view, nodes, edges, positions))
-        elif view.filename == "05_security_monitoring_layer":
-            positions = _layout(nodes)
-            outputs.append(_write_security_relationship_svg(diagrams_dir / f"{view.filename}.svg", view, nodes, edges))
-            outputs.append(_write_security_relationship_png(diagrams_dir / f"{view.filename}.png", view, nodes, edges))
-            outputs.append(_write_security_relationship_pdf(diagrams_dir / f"{view.filename}.pdf", view, nodes, edges))
         else:
-            positions = _layout(nodes)
-            outputs.append(_write_svg(diagrams_dir / f"{view.filename}.svg", view, nodes, edges, positions))
-            outputs.append(_write_png(diagrams_dir / f"{view.filename}.png", view, nodes, edges, positions))
-            outputs.append(_write_pdf(diagrams_dir / f"{view.filename}.pdf", view, nodes, edges, positions))
+            nodes, edges = _select_view(graph, view)
+        positions = _service_dependency_layout(nodes, edges)
+        outputs.append(_write_service_dependency_svg(diagrams_dir / f"{view.filename}.svg", view, nodes, edges, positions))
+        outputs.append(_write_service_dependency_png(diagrams_dir / f"{view.filename}.png", view, nodes, edges, positions))
+        outputs.append(_write_service_dependency_pdf(diagrams_dir / f"{view.filename}.pdf", view, nodes, edges, positions))
         outputs.append(_write_mermaid(diagrams_dir / f"{view.filename}.mmd", view, nodes, edges))
         outputs.extend(
             write_editable_outputs(
@@ -167,8 +158,8 @@ def render_diagrams(graph: GraphModel, diagrams_dir: Path) -> list[Path]:
                 nodes,
                 edges,
                 positions,
-                node_width=SERVICE_DEP_NODE_WIDTH if view.filename in {"00_overview", "03_service_dependency_layer"} else NODE_WIDTH,
-                node_height=SERVICE_DEP_NODE_HEIGHT if view.filename in {"00_overview", "03_service_dependency_layer"} else NODE_HEIGHT,
+                node_width=SERVICE_DEP_NODE_WIDTH,
+                node_height=SERVICE_DEP_NODE_HEIGHT,
             )
         )
     return outputs
@@ -412,16 +403,17 @@ def _service_dependency_size(positions: dict[str, tuple[int, int]], edges: list[
 def _write_service_dependency_svg(path: Path, view: View, nodes: list[GraphNode], edges: list[GraphEdge], positions: dict[str, tuple[int, int]]) -> Path:
     width, height, ledger_x = _service_dependency_size(positions, edges)
     routes = _service_dependency_routes(edges, positions)
+    note = _numbered_view_note(view)
     lines = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-label="{xml_escape(view.title)} main dataflow with edge ledger">',
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-label="{xml_escape(view.title)} numbered graph with edge ledger">',
         "<defs>",
         '<marker id="svcArrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#475569"/></marker>',
         '<filter id="svcShadow"><feDropShadow dx="3" dy="5" stdDeviation="0" flood-color="#CBD5E1" flood-opacity="0.9"/></filter>',
         "</defs>",
         '<rect width="100%" height="100%" fill="#F5F7FB"/>',
         f'<text x="60" y="48" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" fill="#111827">{xml_escape(view.title)}</text>',
-        '<text x="60" y="82" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#5B6573">Main dataflow view with numbered edges and source-record ledger</text>',
-        f'<text x="60" y="104" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#5B6573">{len(nodes)} nodes | {len(edges)} real dataflow edges | no inferred relationships</text>',
+        f'<text x="60" y="82" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#5B6573">{xml_escape(note)}</text>',
+        f'<text x="60" y="104" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#5B6573">{len(nodes)} nodes | {len(edges)} real graph edges | no inferred relationships</text>',
         f'<rect x="40" y="{HEADER_HEIGHT}" width="{ledger_x - 58}" height="{height - HEADER_HEIGHT - 42}" rx="18" fill="#FFFFFF" stroke="#CBD5E1"/>',
         f'<rect x="{ledger_x}" y="{HEADER_HEIGHT}" width="{SERVICE_DEP_LEDGER_WIDTH}" height="{height - HEADER_HEIGHT - 42}" rx="18" fill="#FFFFFF" stroke="#CBD5E1"/>',
     ]
@@ -494,6 +486,7 @@ def _append_service_dependency_svg_ledger(lines: list[str], edges: list[GraphEdg
 def _write_service_dependency_png(path: Path, view: View, nodes: list[GraphNode], edges: list[GraphEdge], positions: dict[str, tuple[int, int]]) -> Path:
     width, height, ledger_x = _service_dependency_size(positions, edges)
     routes = _service_dependency_routes(edges, positions)
+    note = _numbered_view_note(view)
     image = Image.new("RGB", (width, height), "#F5F7FB")
     draw = ImageDraw.Draw(image)
     title_font = _font(30, bold=True)
@@ -504,8 +497,8 @@ def _write_service_dependency_png(path: Path, view: View, nodes: list[GraphNode]
     ledger_title_font = _font(18, bold=True)
     ledger_font = _font(14, bold=True)
     draw.text((60, 25), view.title, fill="#111827", font=title_font)
-    draw.text((60, 68), "Main dataflow view with numbered edges and source-record ledger", fill="#5B6573", font=note_font)
-    draw.text((60, 94), f"{len(nodes)} nodes | {len(edges)} real dataflow edges | no inferred relationships", fill="#5B6573", font=small_font)
+    draw.text((60, 68), note, fill="#5B6573", font=note_font)
+    draw.text((60, 94), f"{len(nodes)} nodes | {len(edges)} real graph edges | no inferred relationships", fill="#5B6573", font=small_font)
     draw.rounded_rectangle((40, HEADER_HEIGHT, ledger_x - 18, height - 42), radius=18, fill="#FFFFFF", outline="#CBD5E1")
     draw.rounded_rectangle((ledger_x, HEADER_HEIGHT, ledger_x + SERVICE_DEP_LEDGER_WIDTH, height - 42), radius=18, fill="#FFFFFF", outline="#CBD5E1")
     for idx, edge in enumerate(edges, 1):
@@ -567,6 +560,12 @@ def _write_service_dependency_pdf(path: Path, view: View, nodes: list[GraphNode]
     return path
 
 
+def _numbered_view_note(view: View) -> str:
+    if view.filename in {"00_overview", "03_service_dependency_layer"}:
+        return "Main dataflow view with numbered edges and source-record ledger"
+    return "Numbered relationship view with source-record ledger"
+
+
 def _service_dependency_routes(edges: list[GraphEdge], positions: dict[str, tuple[int, int]]) -> dict[str, list[tuple[float, float]]]:
     outgoing: dict[str, list[GraphEdge]] = {}
     incoming: dict[str, list[GraphEdge]] = {}
@@ -596,8 +595,8 @@ def _service_dependency_routes(edges: list[GraphEdge], positions: dict[str, tupl
             if abs(sy - ty) < 10:
                 routes[edge.id] = [(sx, sy), (tx, ty)]
                 continue
-            gutter_base = sx + min(max(44, distance * 0.22), 104)
-            lane = ((index - 1) % 5) * 12
+            gutter_base = sx + min(max(44, distance * 0.18), 92)
+            lane = ((index - 1) % 10) * 18
             mid_x = min(tx - 34, gutter_base + lane)
             routes[edge.id] = [(sx, sy), (mid_x, sy), (mid_x, ty), (tx, ty)]
             continue

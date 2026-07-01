@@ -207,9 +207,14 @@ def test_all_diagram_views_render_nonempty_files(tmp_path: Path) -> None:
     assert 'data-edge-type="allowed_by"' not in service_svg
     assert 'data-edge-type="uses_runtime"' not in service_svg
     assert "Firewall Rule" not in service_svg
-    assert "One row per real security / monitoring graph edge" in security_svg
-    assert 'data-security-row="' in security_svg
+    assert "Numbered relationship view with source-record ledger" in security_svg
+    assert "Edge ledger" in security_svg
     assert 'data-edge-number="' in security_svg
+    assert 'data-security-row="' not in security_svg
+    for view in VIEWS:
+        svg = (tmp_path / f"{view.filename}.svg").read_text(encoding="utf-8")
+        assert "Edge ledger" in svg
+        assert 'data-edge-number="' in svg
     drawio_edges = [cell for cell in overview_drawio.findall(".//mxCell") if cell.attrib.get("edge") == "1"]
     assert drawio_edges
     assert all(cell.attrib.get("graphEdgeId") for cell in drawio_edges)

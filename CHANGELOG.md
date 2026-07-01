@@ -25,7 +25,7 @@
 - Overview renderer 拆分为独立模块，降低后续图形优化的维护风险。
 - 分层图新增 draw.io `.drawio` 可编辑源图和 GraphML `.graphml` 工具交换文件，便于拖拽调整和导入专业图形工具。
 - 服务依赖图改为主数据流编号视图：图上线条只显示编号，右侧 `Edge ledger` 展示来源记录、关系类型、端口和源/目标对象，降低线条标签重叠。
-- 总览图同步改为主数据流编号视图，安全与监控图改为逐行关系视图，避免控制类关系大量交叉堆叠。
+- 所有正式分层图统一为编号拓扑视图：图上线条只显示编号，端口、协议、关系类型和来源记录进入右侧 ledger。
 - 主数据流编号渲染改为先画线、再画节点、最后画编号，并将编号锚定到水平线段上，避免数字被线条覆盖。
 
 ### Fixed
@@ -140,7 +140,7 @@ This file records user-visible changes to Dataflow Agent. The repository does no
 - Split the overview renderer into its own module to reduce diagram-renderer maintenance risk.
 - Added draw.io `.drawio` editable source files and GraphML `.graphml` exchange files for layered diagrams, enabling drag editing and import into professional diagram tools.
 - Changed the service dependency layer to a numbered main-dataflow view: lines show only edge numbers, while the right-side `Edge ledger` records source rows, relationship types, ports, and source/target objects to reduce label overlap.
-- Changed the overview layer to the same numbered main-dataflow view and changed the security / monitoring layer to a row-based relationship view to avoid dense crossing control relationships.
+- Unified all formal layered diagrams under the numbered topology view: line labels are reduced to edge numbers, while ports, protocols, relationship types, and source records move to the right-side ledger.
 - Changed numbered main-dataflow rendering to draw lines first, nodes second, and edge-number badges last, with badges anchored to horizontal edge segments so numbers are not covered by lines.
 
 ### Fixed
