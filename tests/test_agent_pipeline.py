@@ -693,6 +693,14 @@ def test_architecture_findings_include_review_observations(tmp_path: Path) -> No
     content = output.read_text(encoding="utf-8")
 
     assert "## 审查观察项" in content
+    assert "采集库存" in content
+    assert "服务共" in content
+    assert "依赖共" in content
+    assert "数据资产共" in content
+    assert "外部系统共" in content
+    assert "网络记录共" in content
+    assert "CI/CD 记录共" in content
+    assert "Evidence 记录共" in content
     assert "P0 服务共" in content
     assert "fw-wide-admin" in content
     assert "0.0.0.0/0" in content

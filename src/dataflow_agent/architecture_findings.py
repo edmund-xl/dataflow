@@ -70,7 +70,7 @@ def _append_chinese(
             "",
             "## 使用口径",
             "",
-            "本报告直接分析 Excel/DCP 生成的 graph model、校验结果、风险结果和可审查事实，不依赖人工阅读图形。下面列出的链路只来自真实 graph edge；不存在的关系不会被补画或补写。`问题分组` 是自动化 finding，`审查观察项` 是通过但仍建议在安全/监控评审中确认的事实。",
+            "本报告直接分析 Excel/DCP 生成的 graph model、校验结果、风险结果和可审查事实，不依赖人工阅读图形。下面列出的链路只来自真实 graph edge；不存在的关系不会被补画或补写。`问题分组` 是自动化 finding，`审查观察项` 是通过但仍建议在架构、安全或监控评审中确认的事实。",
             "",
             "## 真实数据流链路",
             "",
@@ -151,7 +151,7 @@ def _append_english(
             "",
             "## Review Basis",
             "",
-            "This report analyzes the graph model, validation findings, risk findings, and reviewable facts generated from the Excel/DCP source. It does not rely on manual diagram reading. The dataflow paths below are derived only from real graph edges; nonexistent relationships are not invented. `Finding Groups` are automated findings, while `Review Observations` are passing facts that should still be confirmed during security or monitoring review.",
+            "This report analyzes the graph model, validation findings, risk findings, and reviewable facts generated from the Excel/DCP source. It does not rely on manual diagram reading. The dataflow paths below are derived only from real graph edges; nonexistent relationships are not invented. `Finding Groups` are automated findings, while `Review Observations` are passing facts that should still be confirmed during architecture, security, or monitoring review.",
             "",
             "## Real Dataflow Paths",
             "",
@@ -328,10 +328,18 @@ def _category_findings(findings: list[Finding], keywords: list[str]) -> list[Fin
 
 def _review_observations(workbook: WorkbookData, graph: GraphModel) -> list[ReviewObservation]:
     observations: list[ReviewObservation] = []
+    observations.extend(_inventory_observations(workbook, graph))
+    observations.extend(_network_observations(workbook))
+    observations.extend(_service_inventory_observations(workbook, graph))
     observations.extend(_service_monitoring_observations(workbook))
+    observations.extend(_dependency_observations(workbook))
+    observations.extend(_data_asset_observations(workbook))
+    observations.extend(_external_service_observations(workbook))
     observations.extend(_firewall_observations(workbook))
     observations.extend(_monitoring_observations(workbook))
     observations.extend(_iam_observations(workbook))
+    observations.extend(_cicd_observations(workbook))
+    observations.extend(_issue_evidence_observations(workbook))
     if not graph.dropped_edges:
         observations.append(
             ReviewObservation(
@@ -341,6 +349,150 @@ def _review_observations(workbook: WorkbookData, graph: GraphModel) -> list[Revi
                 "",
                 "没有 dropped edge，说明本次生成出的图关系都能回溯到工作簿中的有效节点。",
                 "No dropped edges were detected, so generated graph relationships can be traced back to valid workbook nodes.",
+            )
+        )
+    return observations
+
+
+def _inventory_observations(workbook: WorkbookData, graph: GraphModel) -> list[ReviewObservation]:
+    counts = {
+        "projects": len(active_rows(workbook, "01_Projects")),
+        "networks": len(active_rows(workbook, "02_Networks")),
+        "servers": len(active_rows(workbook, "03_Servers")),
+        "services": len(active_rows(workbook, "04_Services")),
+        "dependencies": len(active_rows(workbook, "05_Dependencies")),
+        "data_assets": len(active_rows(workbook, "06_Data_Assets")),
+        "external_services": len(active_rows(workbook, "12_External_Services")),
+    }
+    return [
+        ReviewObservation(
+            "Info",
+            "Inventory",
+            "workbook",
+            "",
+            "采集库存："
+            + "，".join(
+                [
+                    f"项目={counts['projects']}",
+                    f"网络={counts['networks']}",
+                    f"服务器={counts['servers']}",
+                    f"服务={counts['services']}",
+                    f"依赖={counts['dependencies']}",
+                    f"数据资产={counts['data_assets']}",
+                    f"外部系统={counts['external_services']}",
+                    f"graph 节点={len(graph.nodes)}",
+                    f"graph 关系={len(graph.edges)}",
+                ]
+            )
+            + "。",
+            "Collection inventory: "
+            + ", ".join(
+                [
+                    f"projects={counts['projects']}",
+                    f"networks={counts['networks']}",
+                    f"servers={counts['servers']}",
+                    f"services={counts['services']}",
+                    f"dependencies={counts['dependencies']}",
+                    f"data_assets={counts['data_assets']}",
+                    f"external_services={counts['external_services']}",
+                    f"graph_nodes={len(graph.nodes)}",
+                    f"graph_edges={len(graph.edges)}",
+                ]
+            )
+            + ".",
+        )
+    ]
+
+
+def _network_observations(workbook: WorkbookData) -> list[ReviewObservation]:
+    rows = active_rows(workbook, "02_Networks")
+    if not rows:
+        return [
+            ReviewObservation(
+                "Review",
+                "Network",
+                "02_Networks",
+                "",
+                "未提供网络记录，因此无法判断 VPC、Subnet、NAT、LB 或 PSC/Peering 边界。",
+                "No network records were provided, so VPC, subnet, NAT, LB, or PSC/peering boundaries cannot be assessed.",
+            )
+        ]
+    nat = sorted({row.get("NAT_Name", "") for row in rows if row.get("NAT_Name")})
+    lbs = sorted({row.get("LB_Name", "") for row in rows if row.get("LB_Name")})
+    psc = sorted({row.get("PSC_or_Peering_Name", "") for row in rows if row.get("PSC_or_Peering_Name")})
+    subnets = sorted({row.get("Subnet_Name", "") for row in rows if row.get("Subnet_Name")})
+    observations = [
+        ReviewObservation(
+            "Info",
+            "Network",
+            "02_Networks",
+            "",
+            f"网络记录共 {len(rows)} 条；Subnet={len(subnets)}，NAT={_join_items(nat)}，LB={_join_items(lbs)}，PSC/Peering={_join_items(psc)}。",
+            f"Network records: {len(rows)}; subnets={len(subnets)}, NAT={_join_items_en(nat)}, LB={_join_items_en(lbs)}, PSC/Peering={_join_items_en(psc)}.",
+        )
+    ]
+    external_deps = [row for row in active_rows(workbook, "05_Dependencies") if row.get("Target_External_ID")]
+    if external_deps and not nat and not psc:
+        observations.append(
+            ReviewObservation(
+                "Review",
+                "Network",
+                "02_Networks",
+                "",
+                f"存在 {len(external_deps)} 条外部依赖，但网络记录中未体现 NAT 或 PSC/Peering，建议确认出站路径。",
+                f"There are {len(external_deps)} external dependencies, but no NAT or PSC/peering is recorded; confirm the egress path.",
+            )
+        )
+    return observations
+
+
+def _service_inventory_observations(workbook: WorkbookData, graph: GraphModel) -> list[ReviewObservation]:
+    rows = active_rows(workbook, "04_Services")
+    if not rows:
+        return [
+            ReviewObservation(
+                "Review",
+                "Service",
+                "04_Services",
+                "",
+                "未提供服务记录，因此无法判断服务清单、端口、运行位置或上下游关系。",
+                "No service records were provided, so service inventory, ports, runtime location, or upstream/downstream relationships cannot be assessed.",
+            )
+        ]
+    priority_summary = _value_summary(rows, "Service_Priority")
+    runtime_types = sorted({row.get("Runtime_Type", "") for row in rows if row.get("Runtime_Type")})
+    missing_ports = [row.get("Service_ID", "") for row in rows if not row.get("Listen_Ports")]
+    isolated = _isolated_services(rows, graph)
+    observations = [
+        ReviewObservation(
+            "Info",
+            "Service",
+            "04_Services",
+            "",
+            f"服务共 {len(rows)} 个；优先级分布：{priority_summary}；显式 Runtime_Type：{_join_items(runtime_types)}。",
+            f"Services: {len(rows)}; priority summary: {priority_summary}; explicit Runtime_Type: {_join_items_en(runtime_types)}.",
+        )
+    ]
+    if missing_ports:
+        observations.append(
+            ReviewObservation(
+                "Review",
+                "Service",
+                "04_Services",
+                "",
+                f"存在 {len(missing_ports)} 个服务未填写 Listen_Ports：{_join_items(missing_ports)}。",
+                f"{len(missing_ports)} services have blank Listen_Ports: {_join_items_en(missing_ports)}.",
+            )
+        )
+    if isolated:
+        observations.append(
+            ReviewObservation(
+                "Review",
+                "Service",
+                "04_Services",
+                "",
+                f"存在 {len(isolated)} 个服务没有数据流入/流出关系：{_join_items(isolated)}。",
+                f"{len(isolated)} services have no dataflow in/out relationships: {_join_items_en(isolated)}.",
             )
         )
     return observations
@@ -364,6 +516,127 @@ def _service_monitoring_observations(workbook: WorkbookData) -> list[ReviewObser
             f"P0 services: {len(p0_services)}; with monitoring relationships: {_join_items_en(covered)}; missing monitoring relationships: {_join_items_en(missing)}.",
         )
     ]
+
+
+def _dependency_observations(workbook: WorkbookData) -> list[ReviewObservation]:
+    rows = active_rows(workbook, "05_Dependencies")
+    if not rows:
+        return [
+            ReviewObservation(
+                "Review",
+                "Dependency",
+                "05_Dependencies",
+                "",
+                "未提供依赖记录，因此无法判断服务之间、外部系统和数据资产访问链路。",
+                "No dependency records were provided, so service-to-service, external, or data-asset access paths cannot be assessed.",
+            )
+        ]
+    target_counts = {
+        "service": len([row for row in rows if row.get("Target_Service_ID")]),
+        "external": len([row for row in rows if row.get("Target_External_ID")]),
+        "data_asset": len([row for row in rows if row.get("Target_Data_Asset_ID")]),
+    }
+    missing_auth = [row.get("Dependency_ID", "") for row in rows if not row.get("Auth_Method")]
+    critical = [row for row in rows if row.get("Dependency_Criticality") in {"P0", "P1"}]
+    observations = [
+        ReviewObservation(
+            "Info",
+            "Dependency",
+            "05_Dependencies",
+            "",
+            f"依赖共 {len(rows)} 条；关键依赖={len(critical)}；目标分布：service={target_counts['service']}，external={target_counts['external']}，data_asset={target_counts['data_asset']}；Criticality 分布：{_value_summary(rows, 'Dependency_Criticality')}。",
+            f"Dependencies: {len(rows)}; critical dependencies={len(critical)}; target summary: service={target_counts['service']}, external={target_counts['external']}, data_asset={target_counts['data_asset']}; criticality summary: {_value_summary(rows, 'Dependency_Criticality')}.",
+        )
+    ]
+    if missing_auth:
+        observations.append(
+            ReviewObservation(
+                "Review",
+                "Dependency",
+                "05_Dependencies",
+                "",
+                f"存在 {len(missing_auth)} 条依赖未填写 Auth_Method：{_join_items(missing_auth)}。",
+                f"{len(missing_auth)} dependencies have blank Auth_Method: {_join_items_en(missing_auth)}.",
+            )
+        )
+    return observations
+
+
+def _data_asset_observations(workbook: WorkbookData) -> list[ReviewObservation]:
+    rows = active_rows(workbook, "06_Data_Assets")
+    if not rows:
+        return [
+            ReviewObservation(
+                "Review",
+                "Data Asset",
+                "06_Data_Assets",
+                "",
+                "未提供数据资产记录，因此无法判断存储、数据库、备份、敏感性和服务访问关系。",
+                "No data-asset records were provided, so storage, database, backup, sensitivity, and service access relationships cannot be assessed.",
+            )
+        ]
+    missing_backup = [row.get("Data_Asset_ID", "") for row in rows if not row.get("Backup_Policy")]
+    sensitive = [row.get("Data_Asset_ID", "") for row in rows if row.get("Sensitivity", "").lower() in {"restricted", "high", "critical"}]
+    observations = [
+        ReviewObservation(
+            "Info",
+            "Data Asset",
+            "06_Data_Assets",
+            "",
+            f"数据资产共 {len(rows)} 个；类型分布：{_value_summary(rows, 'Data_Asset_Type')}；敏感性分布：{_value_summary(rows, 'Sensitivity')}；高敏资产：{_join_items(sensitive)}。",
+            f"Data assets: {len(rows)}; type summary: {_value_summary(rows, 'Data_Asset_Type')}; sensitivity summary: {_value_summary(rows, 'Sensitivity')}; sensitive assets: {_join_items_en(sensitive)}.",
+        )
+    ]
+    if missing_backup:
+        observations.append(
+            ReviewObservation(
+                "Review",
+                "Data Asset",
+                "06_Data_Assets",
+                "",
+                f"存在 {len(missing_backup)} 个数据资产未填写 Backup_Policy：{_join_items(missing_backup)}。",
+                f"{len(missing_backup)} data assets have blank Backup_Policy: {_join_items_en(missing_backup)}.",
+            )
+        )
+    return observations
+
+
+def _external_service_observations(workbook: WorkbookData) -> list[ReviewObservation]:
+    rows = active_rows(workbook, "12_External_Services")
+    if not rows:
+        return [
+            ReviewObservation(
+                "Info",
+                "External Service",
+                "12_External_Services",
+                "",
+                "未提供外部系统记录；如果工作负载确实没有外部依赖，该状态可以接受，否则需要补充外部系统清单。",
+                "No external service records were provided. This is acceptable only if the workload truly has no external dependencies; otherwise add the external system inventory.",
+            )
+        ]
+    missing_auth = [row.get("External_ID", "") for row in rows if not row.get("Auth_Method")]
+    observations = [
+        ReviewObservation(
+            "Info",
+            "External Service",
+            "12_External_Services",
+            "",
+            f"外部系统共 {len(rows)} 个；类型分布：{_value_summary(rows, 'External_Type')}；方向分布：{_value_summary(rows, 'Direction')}；数据分类分布：{_value_summary(rows, 'Data_Classification')}。",
+            f"External services: {len(rows)}; type summary: {_value_summary(rows, 'External_Type')}; direction summary: {_value_summary(rows, 'Direction')}; data classification summary: {_value_summary(rows, 'Data_Classification')}.",
+        )
+    ]
+    if missing_auth:
+        observations.append(
+            ReviewObservation(
+                "Review",
+                "External Service",
+                "12_External_Services",
+                "",
+                f"存在 {len(missing_auth)} 个外部系统未填写 Auth_Method：{_join_items(missing_auth)}。",
+                f"{len(missing_auth)} external services have blank Auth_Method: {_join_items_en(missing_auth)}.",
+            )
+        )
+    return observations
 
 
 def _firewall_observations(workbook: WorkbookData) -> list[ReviewObservation]:
@@ -477,6 +750,108 @@ def _iam_observations(workbook: WorkbookData) -> list[ReviewObservation]:
     ]
 
 
+def _cicd_observations(workbook: WorkbookData) -> list[ReviewObservation]:
+    rows = active_rows(workbook, "11_CICD")
+    if not rows:
+        return [
+            ReviewObservation(
+                "Review",
+                "CI/CD",
+                "11_CICD",
+                "",
+                "未提供 CI/CD 记录，因此无法判断部署入口、审批、Runner、制品仓库或部署账号。",
+                "No CI/CD records were provided, so deployment entry, approval, runner, artifact registry, or deployment account cannot be assessed.",
+            )
+        ]
+    approval = _value_summary(rows, "Approval_Required")
+    missing_approval = [row.get("CICD_ID", "") for row in rows if row.get("Approval_Required") in {"", "No", "Not_Required"}]
+    missing_target = [row.get("CICD_ID", "") for row in rows if not (row.get("Target_Service_ID") or row.get("Target_Instance_ID"))]
+    observations = [
+        ReviewObservation(
+            "Info",
+            "CI/CD",
+            "11_CICD",
+            "",
+            f"CI/CD 记录共 {len(rows)} 条；系统分布：{_value_summary(rows, 'System')}；审批分布：{approval}。",
+            f"CI/CD records: {len(rows)}; system summary: {_value_summary(rows, 'System')}; approval summary: {approval}.",
+        )
+    ]
+    if missing_approval:
+        observations.append(
+            ReviewObservation(
+                "Review",
+                "CI/CD",
+                "11_CICD",
+                "",
+                f"存在 {len(missing_approval)} 条部署记录未体现审批要求：{_join_items(missing_approval)}。",
+                f"{len(missing_approval)} deployment records do not show an approval requirement: {_join_items_en(missing_approval)}.",
+            )
+        )
+    if missing_target:
+        observations.append(
+            ReviewObservation(
+                "Review",
+                "CI/CD",
+                "11_CICD",
+                "",
+                f"存在 {len(missing_target)} 条部署记录未关联目标服务或实例：{_join_items(missing_target)}。",
+                f"{len(missing_target)} deployment records are not linked to a target service or instance: {_join_items_en(missing_target)}.",
+            )
+        )
+    return observations
+
+
+def _issue_evidence_observations(workbook: WorkbookData) -> list[ReviewObservation]:
+    observations: list[ReviewObservation] = []
+    issue_rows = active_rows(workbook, "13_Issues_Exceptions")
+    evidence_rows = active_rows(workbook, "14_Evidence_Index")
+    if issue_rows:
+        observations.append(
+            ReviewObservation(
+                "Info",
+                "Issue",
+                "13_Issues_Exceptions",
+                "",
+                f"Issue/Exception 记录共 {len(issue_rows)} 条；严重度分布：{_value_summary(issue_rows, 'Severity')}；状态分布：{_value_summary(issue_rows, 'Status')}。",
+                f"Issue/Exception records: {len(issue_rows)}; severity summary: {_value_summary(issue_rows, 'Severity')}; status summary: {_value_summary(issue_rows, 'Status')}.",
+            )
+        )
+    else:
+        observations.append(
+            ReviewObservation(
+                "Info",
+                "Issue",
+                "13_Issues_Exceptions",
+                "",
+                "未提供 Issue/Exception 记录；如果存在已知例外或待办项，应补充到该表。",
+                "No issue/exception records were provided. Add known exceptions or open action items to this sheet if any exist.",
+            )
+        )
+    observations.append(
+        ReviewObservation(
+            "Info" if evidence_rows else "Review",
+            "Evidence",
+            "14_Evidence_Index",
+            "",
+            f"Evidence 记录共 {len(evidence_rows)} 条；来源系统分布：{_value_summary(evidence_rows, 'Source_System') if evidence_rows else '无'}。",
+            f"Evidence records: {len(evidence_rows)}; source system summary: {_value_summary(evidence_rows, 'Source_System') if evidence_rows else 'None'}.",
+        )
+    )
+    missing_integrity = [row.get("Evidence_ID", "") for row in evidence_rows if not row.get("Integrity_Note")]
+    if missing_integrity:
+        observations.append(
+            ReviewObservation(
+                "Review",
+                "Evidence",
+                "14_Evidence_Index",
+                "",
+                f"存在 {len(missing_integrity)} 条证据未填写 Integrity_Note：{_join_items(missing_integrity)}。",
+                f"{len(missing_integrity)} evidence records have blank Integrity_Note: {_join_items_en(missing_integrity)}.",
+            )
+        )
+    return observations
+
+
 def _direction_summary(rows: list[dict[str, str]]) -> str:
     return _value_summary(rows, "Direction")
 
@@ -495,6 +870,12 @@ def _join_items(items: list[str]) -> str:
 
 def _join_items_en(items: list[str]) -> str:
     return ", ".join(item for item in items if item) or "None"
+
+
+def _isolated_services(rows: list[dict[str, str]], graph: GraphModel) -> list[str]:
+    dataflow_edges = [edge for edge in graph.edges if edge.type in DATAFLOW_EDGE_TYPES]
+    connected = {edge.source for edge in dataflow_edges} | {edge.target for edge in dataflow_edges}
+    return [row.get("Service_Name") or row.get("Service_ID", "") for row in rows if row.get("Service_ID") not in connected]
 
 
 def _conclusion(findings: list[Finding]) -> str:
