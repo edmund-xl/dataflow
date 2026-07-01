@@ -8,6 +8,7 @@ dist/
 agent_check/
 build/
 *.egg-info/
+node_modules/
 raw_exports/
 evidence/
 input/private/

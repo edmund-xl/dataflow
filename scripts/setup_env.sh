@@ -16,6 +16,13 @@ cd "${REPO_ROOT}"
 "${VENV_DIR}/bin/python" -m pip install --upgrade pip
 "${VENV_DIR}/bin/python" -m pip install -e ".[dev]"
 
+if command -v npm >/dev/null 2>&1; then
+  npm ci --no-audit --no-fund
+  echo "ELK diagram layout dependencies are ready."
+else
+  echo "WARN: npm is not available; overview diagrams will fall back to the built-in deterministic layout."
+fi
+
 echo "Dataflow Agent environment is ready."
 echo "Use this Python for scripts:"
 echo "  export DATAFLOW_PYTHON=\"${VENV_DIR}/bin/python\""

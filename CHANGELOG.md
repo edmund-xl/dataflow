@@ -12,6 +12,7 @@
 - 总览图和服务依赖图的画布主线标签改为紧凑 `E1/E2/...` 编号，端口、协议、状态和来源记录统一放入右侧 edge ledger，降低线条和标签堆叠。
 - 总览图和服务依赖图新增工程制图式 line bridge / jump-over 表达，在线条交叉处显示“跨越但不连接”的小桥标记。
 - 修正 line bridge 不再用白色 gap 挖断被跨越线，并放宽 top / bottom bus 轨道，减少同向长线重合。
+- 总览图和服务依赖图正式接入 ELK layered orthogonal layout；主数据流优先由 ELK 计算节点布局和正交线路，Node.js / elkjs 不可用时回退到内置确定性布局。
 
 ## 0.1.1 - 2026-07-01
 
@@ -136,6 +137,10 @@ This file records user-visible changes to Dataflow Agent. Historical development
 ### Changed
 
 - Unified the overview and service dependency diagrams around the information-rich entry-context, primary-dataflow, control-summary, and edge-ledger view, with stronger lane-based orthogonal routing, line halos, numbered labels, and ledger traceability for primary dataflow lines.
+- Changed canvas labels in the overview and service dependency diagrams to compact `E1/E2/...` labels, with ports, protocols, status, and source records kept in the right-side edge ledger.
+- Added engineering-style line bridge / jump-over marks to the overview and service dependency diagrams for crossings that mean "crossing, not connected".
+- Fixed line bridge rendering so it no longer cuts the crossed line with a white gap, and widened top / bottom bus lanes to reduce same-direction long-line overlap.
+- Integrated ELK layered orthogonal layout for the overview and service dependency diagrams; primary dataflow routing prefers ELK node layout and orthogonal edge routing, with a built-in deterministic fallback when Node.js / elkjs is unavailable.
 
 ## 0.1.1 - 2026-07-01
 

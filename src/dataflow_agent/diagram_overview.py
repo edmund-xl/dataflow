@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -79,6 +82,8 @@ class OverviewLayout:
     context_edges: list[GraphEdge]
     perimeter_edges: list[GraphEdge]
     all_edges: list[GraphEdge]
+    edge_routes: dict[str, list[tuple[float, float]]]
+    layout_engine: str = "builtin"
 
 
 @dataclass(frozen=True)
@@ -91,7 +96,7 @@ class OverviewLineBridge:
 
 def _overview_layout(graph: GraphModel) -> OverviewLayout:
     main_edges = _overview_main_edges(graph.edges)
-    positions = _overview_positions(graph.nodes, main_edges)
+    positions, edge_routes, layout_size, layout_engine = _overview_positions_and_routes(graph.nodes, main_edges)
     max_x = max((x for x, _ in positions.values()), default=LEFT_MARGIN) + OVERVIEW_NODE_WIDTH
     max_y = max((y for _, y in positions.values()), default=360) + OVERVIEW_NODE_HEIGHT
     ledger_x = max(1490, max_x + 88)
@@ -126,7 +131,86 @@ def _overview_layout(graph: GraphModel) -> OverviewLayout:
         context_edges=context_edges,
         perimeter_edges=perimeter_edges,
         all_edges=graph.edges,
+        edge_routes=edge_routes,
+        layout_engine=layout_engine,
     )
+
+
+def _overview_positions_and_routes(
+    nodes: dict[str, GraphNode],
+    edges: list[GraphEdge],
+) -> tuple[dict[str, tuple[int, int]], dict[str, list[tuple[float, float]]], tuple[float, float], str]:
+    elk_result = _overview_elk_positions_and_routes(nodes, edges)
+    if elk_result:
+        return elk_result
+    positions = _overview_positions(nodes, edges)
+    return positions, {}, (0.0, 0.0), "builtin"
+
+
+def _overview_elk_positions_and_routes(
+    nodes: dict[str, GraphNode],
+    edges: list[GraphEdge],
+) -> tuple[dict[str, tuple[int, int]], dict[str, list[tuple[float, float]]], tuple[float, float], str] | None:
+    node_bin = shutil.which("node")
+    if not node_bin or not edges:
+        return None
+    helper = Path(__file__).with_name("elk_layout.mjs")
+    if not helper.exists():
+        return None
+    node_ids = sorted({edge.source for edge in edges}.union(edge.target for edge in edges))
+    payload = {
+        "nodeWidth": OVERVIEW_NODE_WIDTH,
+        "nodeHeight": OVERVIEW_NODE_HEIGHT,
+        "nodes": [
+            {
+                "id": node_id,
+                "label": nodes[node_id].label if node_id in nodes else node_id,
+            }
+            for node_id in node_ids
+            if node_id in nodes
+        ],
+        "edges": [
+            {
+                "id": edge.id,
+                "source": edge.source,
+                "target": edge.target,
+            }
+            for edge in edges
+            if edge.source in nodes and edge.target in nodes
+        ],
+    }
+    if not payload["nodes"] or not payload["edges"]:
+        return None
+    try:
+        completed = subprocess.run(
+            [node_bin, str(helper)],
+            input=json.dumps(payload),
+            text=True,
+            capture_output=True,
+            check=True,
+            timeout=15,
+            cwd=str(Path(__file__).resolve().parents[2]),
+        )
+        result = json.loads(completed.stdout)
+    except Exception:
+        return None
+    x_offset = 120
+    y_offset = 390
+    positions: dict[str, tuple[int, int]] = {}
+    for node_id, point in result.get("positions", {}).items():
+        if node_id in nodes:
+            positions[node_id] = (int(round(x_offset + float(point.get("x", 0)))), int(round(y_offset + float(point.get("y", 0)))))
+    routes: dict[str, list[tuple[float, float]]] = {}
+    for edge_id, points in result.get("routes", {}).items():
+        route: list[tuple[float, float]] = []
+        for point in points:
+            route.append((x_offset + float(point.get("x", 0)), y_offset + float(point.get("y", 0))))
+        if route:
+            routes[edge_id] = route
+    if not positions:
+        return None
+    layout_size = (float(result.get("width", 0)), float(result.get("height", 0)))
+    return positions, routes, layout_size, "elk"
 
 
 def _overview_main_edges(edges: list[GraphEdge]) -> list[GraphEdge]:
@@ -139,6 +223,16 @@ def _overview_main_edges(edges: list[GraphEdge]) -> list[GraphEdge]:
         if current is None or _overview_edge_rank(edge) < _overview_edge_rank(current):
             best[key] = edge
     return sorted(best.values(), key=lambda edge: (_edge_number(edge), edge.type, edge.source, edge.target))
+
+
+def _overview_layout_note(layout: OverviewLayout) -> str:
+    if layout.layout_engine == "elk":
+        return "Graph-truthful architecture view | ELK layered orthogonal routing | no inferred dataflow edges"
+    return "Graph-truthful architecture view | built-in deterministic routing | no inferred dataflow edges"
+
+
+def _overview_primary_lane_label(layout: OverviewLayout) -> str:
+    return "Primary graph dataflow - ELK routed" if layout.layout_engine == "elk" else "Primary graph dataflow"
 
 
 def _overview_edge_rank(edge: GraphEdge) -> tuple[int, int, int]:
@@ -262,11 +356,11 @@ def _write_overview_svg(path: Path, view: View, layout: OverviewLayout) -> Path:
         f'<rect x="0" y="0" width="{width}" height="120" fill="#FFFFFF" stroke="#D8E1EF" stroke-width="1"/>',
         '<rect x="36" y="28" width="8" height="62" rx="4" fill="#2563EB"/>',
         f'<text x="64" y="54" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" fill="#111827">{xml_escape(view.title)}</text>',
-        '<text x="64" y="84" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#475569">Graph-truthful architecture view | generated from workbook graph | no inferred dataflow edges</text>',
+        f'<text x="64" y="84" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#475569">{xml_escape(_overview_layout_note(layout))}</text>',
     ]
     _append_overview_svg_legend(lines, width)
     _append_overview_svg_lane(lines, 42, 140, layout.lane_width, 118, "Entry context / perimeter control")
-    _append_overview_svg_lane(lines, 42, layout.main_top, layout.lane_width, layout.main_height, "Primary graph dataflow")
+    _append_overview_svg_lane(lines, 42, layout.main_top, layout.lane_width, layout.main_height, _overview_primary_lane_label(layout))
     _append_overview_svg_lane(lines, 42, layout.controls_top, layout.lane_width, layout.controls_height, "Controls and runtime summary")
     _append_overview_svg_perimeter(lines, layout)
     for edge in layout.main_edges:
@@ -346,10 +440,14 @@ def _append_overview_svg_edge(lines: list[str], edge: GraphEdge, layout: Overvie
     lines.append(f'<title>{xml_escape(_edge_accessible_label(edge))}</title>')
     lines.append(f'<polyline points="{point_text}" fill="none" stroke="#FFFFFF" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round" data-overview-role="main-dataflow-halo" data-edge-id="{xml_escape(edge.id)}" data-edge-number="E{edge_number}"/>')
     lines.append(f'<polyline points="{point_text}" fill="none" stroke="{color}" stroke-width="{_overview_edge_width(edge)}" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#{marker})"{dash} data-overview-role="main-dataflow" data-edge-id="{xml_escape(edge.id)}" data-edge-number="E{edge_number}" data-edge-type="{xml_escape(edge.type)}" data-source="{xml_escape(edge.source)}" data-target="{xml_escape(edge.target)}"/>')
-    lines.append(f'<circle cx="{label_x}" cy="{label_y}" r="6" fill="{color}"/>')
-    badge_x, badge_y = _overview_label_badge_position(edge, points, layout)
+    if layout.layout_engine == "elk":
+        badge_x, badge_y = label_x - 23, label_y - 14
+    else:
+        lines.append(f'<circle cx="{label_x}" cy="{label_y}" r="6" fill="{color}"/>')
+        badge_x, badge_y = _overview_label_badge_position(edge, points, layout)
     _append_overview_svg_badge(lines, badge_x, badge_y, label, color, _overview_edge_label_fill(edge), "main-dataflow-label", edge)
-    lines.append(f'<polyline points="{label_x},{label_y} {label_x},{badge_y + 14}" fill="none" stroke="{color}" stroke-width="1.2" stroke-linecap="round"/>')
+    if layout.layout_engine != "elk":
+        lines.append(f'<polyline points="{label_x},{label_y} {label_x},{badge_y + 14}" fill="none" stroke="{color}" stroke-width="1.2" stroke-linecap="round"/>')
     lines.append("</g>")
 
 
@@ -477,6 +575,8 @@ def _append_overview_svg_badge(lines: list[str], x: float, y: float, label: str,
 
 
 def _overview_edge_points(edge: GraphEdge, layout: OverviewLayout) -> list[tuple[float, float]]:
+    if edge.id in layout.edge_routes:
+        return layout.edge_routes[edge.id]
     source = layout.positions.get(edge.source)
     target = layout.positions.get(edge.target)
     if not source or not target:
@@ -885,11 +985,11 @@ def _write_overview_png(path: Path, view: View, layout: OverviewLayout) -> Path:
     draw.rectangle((0, 0, layout.width, 120), fill="#FFFFFF", outline="#D8E1EF")
     draw.rounded_rectangle((36, 28, 44, 90), radius=4, fill="#2563EB")
     draw.text((64, 24), view.title, fill="#111827", font=title_font)
-    draw.text((64, 72), "Graph-truthful architecture view | generated from workbook graph | no inferred dataflow edges", fill="#475569", font=subtitle_font)
+    draw.text((64, 72), _overview_layout_note(layout), fill="#475569", font=subtitle_font)
     _draw_overview_png_legend(draw, layout.width, small_font)
     for x, y, w, h, label in [
         (42, 140, layout.lane_width, 118, "Entry context / perimeter control"),
-        (42, layout.main_top, layout.lane_width, layout.main_height, "Primary graph dataflow"),
+        (42, layout.main_top, layout.lane_width, layout.main_height, _overview_primary_lane_label(layout)),
         (42, layout.controls_top, layout.lane_width, layout.controls_height, "Controls and runtime summary"),
     ]:
         draw.rounded_rectangle((x, y, x + w, y + h), radius=18, fill="#FFFFFF", outline="#CBD5E1")
@@ -953,9 +1053,12 @@ def _draw_overview_png_edge(draw: ImageDraw.ImageDraw, edge: GraphEdge, layout: 
     _draw_png_polyline_with_arrow(draw, points, "#FFFFFF", 10, False)
     _draw_png_polyline_with_arrow(draw, points, color, int(float(_overview_edge_width(edge))), _status_kind(edge.status) == "pending")
     label_x, label_y = _overview_label_anchor(points)
-    badge_x, badge_y = _overview_label_badge_position(edge, points, layout)
-    draw.ellipse((label_x - 6, label_y - 6, label_x + 6, label_y + 6), fill=color)
-    draw.line((label_x, label_y, label_x, badge_y + 14), fill=color, width=1)
+    if layout.layout_engine == "elk":
+        badge_x, badge_y = label_x - 23, label_y - 14
+    else:
+        badge_x, badge_y = _overview_label_badge_position(edge, points, layout)
+        draw.ellipse((label_x - 6, label_y - 6, label_x + 6, label_y + 6), fill=color)
+        draw.line((label_x, label_y, label_x, badge_y + 14), fill=color, width=1)
     _draw_overview_png_badge(draw, badge_x, badge_y, _overview_edge_display_label(edge, layout), color, _overview_edge_label_fill(edge), font)
 
 

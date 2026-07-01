@@ -21,6 +21,8 @@ PYTHONPATH="${REPO_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}" exec "${PYTHON_BIN}" 
 from __future__ import annotations
 
 import importlib
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -73,6 +75,23 @@ try:
     add(ready, "pytest is available for developer regression tests")
 except Exception:
     add(warn, "pytest is not installed; daily scripts still work, but developer regression tests need the dev extra")
+
+node_bin = shutil.which("node")
+npm_bin = shutil.which("npm")
+if node_bin and npm_bin:
+    add(ready, f"Node.js is available for ELK overview diagram layout: {node_bin}")
+    elk_check = subprocess.run(
+        [node_bin, "-e", "import('elkjs/lib/elk.bundled.js').then(()=>process.exit(0)).catch(()=>process.exit(1))"],
+        cwd=repo_root,
+        text=True,
+        capture_output=True,
+    )
+    if elk_check.returncode == 0:
+        add(ready, "elkjs is installed for layered orthogonal overview routing")
+    else:
+        add(warn, "elkjs is not installed; run npm ci, otherwise overview diagrams fall back to built-in routing")
+else:
+    add(warn, "Node.js/npm is not available; overview diagrams fall back to built-in deterministic routing")
 
 try:
     from dataflow_agent.constants import find_workbook

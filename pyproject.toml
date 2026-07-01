@@ -26,6 +26,9 @@ dataflow-agent = "dataflow_agent.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+dataflow_agent = ["*.mjs"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
