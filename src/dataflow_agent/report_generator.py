@@ -6,6 +6,7 @@ from pathlib import Path
 from docx import Document
 
 from .artifacts import write_acceptance_checklist, write_findings_workbook, write_logic_check_results, write_validation_json
+from .architecture_findings import write_architecture_findings
 from .models import Finding, GraphModel, WorkbookData
 
 
@@ -24,6 +25,7 @@ def generate_reports(
     write_findings_workbook(reports_dir / "issue_risk_register.xlsx", "Issues_Risks", validation_findings + risk_findings)
     write_logic_check_results(reports_dir / "logic_check_results.json", risk_findings)
     write_acceptance_checklist(reports_dir / "acceptance_checklist.xlsx", validation_findings, risk_findings, graph)
+    write_architecture_findings(reports_dir / "architecture_findings.md", workbook, graph, validation_findings, risk_findings)
     _write_logic_mapping_docx(reports_dir / "logic_mapping_validation_report.docx", workbook, graph, validation_findings, risk_findings, env, version)
 
 

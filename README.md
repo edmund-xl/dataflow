@@ -24,7 +24,7 @@ Dataflow Project 生产环境涉及云项目、网络、服务器、服务、服
 
 当前版本是规则驱动确定性 Agent。事实来源仅限 DevOps 或信息采集人员提交的 DCP 工作簿和证据目录；Agent 自动完成校验、归一化、建图、风险检查、出图、报告和打包。Agent 不凭空补依赖，不自动接受安全例外，不修改生产环境。后续外部系统同步、只读采集和版本 Diff 只作为路线图能力，不属于当前默认流程。
 
-分层图采用内置专业渲染器生成：总览图和服务依赖图使用编号拓扑图，其他分层图保留原始 C4 / 深色审计风格。渲染不依赖外部图形命令，能够稳定生成 SVG、PNG、PDF、Mermaid 调试文件、draw.io 可编辑源图和 GraphML 工具交换文件。draw.io / GraphML 只用于展示和二次编辑，架构事实仍以源工作簿为准；如果关系需要变更，应修改 Excel/DCP 后重新生成。
+分层图采用内置专业渲染器生成：总览图和服务依赖图使用编号拓扑图，其他分层图使用统一的浅色 C4 架构配色。渲染不依赖外部图形命令，能够稳定生成 SVG、PNG、PDF、Mermaid 调试文件、draw.io 可编辑源图和 GraphML 工具交换文件。draw.io / GraphML 只用于展示和二次编辑，架构事实仍以源工作簿为准；如果关系需要变更，应修改 Excel/DCP 后重新生成。
 
 总览图和服务依赖图采用主数据流编号视图：只展示真实数据流关系，图上线条以编号标识，右侧 `Edge ledger` 记录来源工作簿记录、关系类型、端口和源/目标对象，避免长标签压在线路上导致不可读。其他图层回到原始表现方式，优先保证整体视觉稳定和可交付。
 
@@ -62,7 +62,7 @@ scripts/check_dcp.sh samples/DCP_clean_v0.1
 samples/DCP_clean_v0.1/agent_check/
 ```
 
-先阅读 `check_summary.md`。如果状态为 `NEEDS_FIX`，继续阅读 `fix_list.md`，修正源工作簿后再次执行脚本。
+先阅读 `check_summary.md`。如果状态为 `NEEDS_FIX`，继续阅读 `fix_list.md`，修正源工作簿后再次执行脚本。需要从内容本身判断架构、安全、监控和证据问题时，阅读 `architecture_findings.md`；该报告直接分析 Excel/DCP 生成的 graph model，不依赖人工看图。
 
 如需指定输出目录：
 
@@ -271,7 +271,7 @@ Default output path:
 samples/DCP_clean_v0.1/agent_check/
 ```
 
-Read `check_summary.md` first. If the status is `NEEDS_FIX`, read `fix_list.md`, correct the source workbook, and run the script again.
+Read `check_summary.md` first. If the status is `NEEDS_FIX`, read `fix_list.md`, correct the source workbook, and run the script again. To review architecture, security, monitoring, and evidence issues from the data itself, read `architecture_findings.md`; it directly analyzes the graph model generated from the Excel/DCP source and does not depend on manually reading diagrams.
 
 To specify the output directory:
 

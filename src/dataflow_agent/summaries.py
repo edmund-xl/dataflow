@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .architecture_findings import write_architecture_findings
 from .models import Finding
 from .pipeline import PipelineState
 
@@ -13,6 +14,7 @@ def write_check_summaries(output_root: Path, state: PipelineState) -> None:
     pending = [f for f in findings if f.status == "Pending_Confirmation"]
     _write_summary(output_root / "check_summary.md", state, findings, blocking, pending)
     _write_fix_list(output_root / "fix_list.md", findings)
+    write_architecture_findings(output_root / "architecture_findings.md", state.normalized_workbook, state.graph, state.validation.findings, state.risks)
 
 
 def _write_summary(

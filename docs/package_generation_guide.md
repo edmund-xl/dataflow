@@ -124,7 +124,7 @@ scripts/merge_dcp.sh path/to/DCP_A path/to/DCP_B --output /tmp/dataflow_merge
 
 ## 3. Delivery Content
 
-The package contains normalized data, graph models, dropped-edge audit data, layered diagrams, validation reports, risk registers, acceptance checklists, metadata, and a compressed archive.
+The package contains normalized data, graph models, dropped-edge audit data, layered diagrams, validation reports, architecture findings, risk registers, acceptance checklists, metadata, and a compressed archive.
 
 ## 4. Service Port Query
 

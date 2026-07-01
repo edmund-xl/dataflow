@@ -83,6 +83,7 @@ def main(argv: list[str] | None = None) -> int:
         _print_summary(state)
         print(f"Check summary: {output_root / 'check_summary.md'}")
         print(f"Fix list: {output_root / 'fix_list.md'}")
+        print(f"Architecture findings: {output_root / 'architecture_findings.md'}")
         return 0
 
     if args.command == "quick-build":

@@ -186,7 +186,7 @@ dataflow_package_v0.1/
   metadata.json
 ```
 
-每个 `diagrams/` 图层均以同一文件名同时输出 SVG、PNG、PDF、Mermaid 调试文件、draw.io 可编辑源图和 GraphML 工具交换文件。常规图层使用内置 C4 架构图风格，安全与监控图层使用深色审计风格；SVG 风险标记包含可访问和机器可读属性。所有图形均由工作簿数据重新生成，不依赖外部图形命令。draw.io / GraphML 只用于展示编辑和工具导入，不替代源工作簿。
+每个 `diagrams/` 图层均以同一文件名同时输出 SVG、PNG、PDF、Mermaid 调试文件、draw.io 可编辑源图和 GraphML 工具交换文件。常规图层，包括安全与监控图层，均使用内置浅色 C4 架构图风格；SVG 风险标记包含可访问和机器可读属性。所有图形均由工作簿数据重新生成，不依赖外部图形命令。draw.io / GraphML 只用于展示编辑和工具导入，不替代源工作簿。
 
 ## 十一、开源授权
 

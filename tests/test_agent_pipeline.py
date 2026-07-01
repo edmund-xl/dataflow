@@ -52,6 +52,7 @@ def test_full_run_outputs_package(tmp_path: Path) -> None:
     assert (package_dir / "normalized" / "dataflow_graph.json").exists()
     assert (package_dir / "normalized" / "dataflow_graph.yaml").exists()
     assert (package_dir / "reports" / "validation_report.xlsx").exists()
+    assert (package_dir / "reports" / "architecture_findings.md").exists()
     assert (package_dir / "reports" / "logic_mapping_validation_report.docx").exists()
     assert (package_dir / "reports" / "issue_risk_register.xlsx").exists()
     assert (package_dir / "reports" / "acceptance_checklist.xlsx").exists()
@@ -64,6 +65,11 @@ def test_full_run_outputs_package(tmp_path: Path) -> None:
     assert metadata["schema_version"] == "workbook_schema.v0.1"
     assert metadata["template_version"] == "dataflow_template.v1.0"
     assert metadata["input_file_hash"]
+    architecture_findings = (package_dir / "reports" / "architecture_findings.md").read_text(encoding="utf-8")
+    assert "# 架构问题分析报告" in architecture_findings
+    assert "# Architecture Findings Report" in architecture_findings
+    assert "真实数据流链路" in architecture_findings
+    assert "nonexistent relationships are not invented" in architecture_findings
 
 
 def test_clean_sample_has_no_validation_or_risk_findings() -> None:
@@ -474,12 +480,15 @@ def test_script_check_dcp_runs_with_defaults(tmp_path: Path) -> None:
     check_dir = CLEAN_SAMPLE_DCP / "agent_check"
     assert (check_dir / "check_summary.md").exists()
     assert (check_dir / "fix_list.md").exists()
+    assert (check_dir / "architecture_findings.md").exists()
     assert "自检状态：`PASS`" in (check_dir / "check_summary.md").read_text(encoding="utf-8")
+    assert "分析结论：`PASS`" in (check_dir / "architecture_findings.md").read_text(encoding="utf-8")
 
     custom_check = tmp_path / "agent_check"
     subprocess.run(["scripts/check_dcp.sh", "samples/DCP_clean_v0.1", "--output", str(custom_check)], cwd=ROOT, check=True, env=_script_env())
     assert (custom_check / "check_summary.md").exists()
     assert (custom_check / "fix_list.md").exists()
+    assert (custom_check / "architecture_findings.md").exists()
 
 
 def test_script_build_package_runs_with_defaults(tmp_path: Path) -> None:
@@ -652,6 +661,10 @@ def test_generated_docs_are_chinese_first_then_english(tmp_path: Path) -> None:
     headers = [cell.value for cell in issue_register.active[1]]
     for field in ["Owner", "Due_Date", "Exception_Decision", "Evidence_ID"]:
         assert field in headers
+    architecture_findings = (package_dir / "reports" / "architecture_findings.md").read_text(encoding="utf-8")
+    assert architecture_findings.index("# 中文版本") < architecture_findings.index("# English Version")
+    assert "| Edge_ID | 类型 | 来源 | 目标 | 状态 | 来源记录 | Evidence_ID |" in architecture_findings
+    assert "不存在的关系不会被补画或补写" in architecture_findings
 
 
 def test_devops_docs_and_deterministic_agent_boundary_are_documented() -> None:
