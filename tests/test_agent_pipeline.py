@@ -7,6 +7,7 @@ import subprocess
 import sys
 from io import BytesIO
 from pathlib import Path
+from xml.etree import ElementTree
 from zipfile import ZipFile
 
 import pytest
@@ -186,7 +187,7 @@ def test_all_diagram_views_render_nonempty_files(tmp_path: Path) -> None:
 
     outputs = render_diagrams(graph, tmp_path)
 
-    expected_count = len(VIEWS) * 4
+    expected_count = len(VIEWS) * 6
     assert len(outputs) == expected_count
     for path in outputs:
         assert path.exists()
@@ -194,13 +195,33 @@ def test_all_diagram_views_render_nonempty_files(tmp_path: Path) -> None:
 
     overview_svg = (tmp_path / "00_overview.svg").read_text(encoding="utf-8")
     security_svg = (tmp_path / "05_security_monitoring_layer.svg").read_text(encoding="utf-8")
+    service_svg = (tmp_path / "03_service_dependency_layer.svg").read_text(encoding="utf-8")
+    overview_drawio = ElementTree.parse(tmp_path / "00_overview.drawio")
+    overview_graphml = ElementTree.parse(tmp_path / "00_overview.graphml")
+    service_drawio = ElementTree.parse(tmp_path / "03_service_dependency_layer.drawio")
     legacy = "mega" + "eth"
     assert "Graph-truthful architecture view" in overview_svg
     assert "Legend" in overview_svg
     assert "Graph edge ledger" in overview_svg
     assert "Subnet" not in overview_svg
     assert "Security Review Focus" in security_svg
+    assert "coverage matrix" in security_svg
     assert "#101827" in security_svg
+    assert "<polyline" not in security_svg
+    assert 'data-edge-id="' in security_svg
+    assert 'data-edge-type="allowed_by"' not in service_svg
+    assert 'data-edge-type="runs_on_runtime"' not in service_svg
+    assert "Firewall Rule" not in service_svg
+    drawio_edges = [cell for cell in overview_drawio.findall(".//mxCell") if cell.attrib.get("edge") == "1"]
+    assert drawio_edges
+    assert all(cell.attrib.get("graphEdgeId") for cell in drawio_edges)
+    assert not any(cell.attrib.get("sourceNodeId") == "prod-lb-public" and cell.attrib.get("targetNodeId") == "svc-nginx-entry" for cell in drawio_edges)
+    graphml_root = overview_graphml.getroot()
+    graphml_edges = graphml_root.findall(".//{http://graphml.graphdrawing.org/xmlns}edge")
+    assert graphml_edges
+    service_edges = [cell for cell in service_drawio.findall(".//mxCell") if cell.attrib.get("edge") == "1"]
+    assert service_edges
+    assert not any(cell.attrib.get("edgeType") in {"allowed_by", "runs_on_runtime", "uses_runtime"} for cell in service_edges)
     assert legacy not in overview_svg.lower()
     assert legacy not in security_svg.lower()
 
@@ -324,13 +345,17 @@ def test_service_drilldown_renders_expected_artifacts(tmp_path: Path) -> None:
 
     outputs = render_service_drilldown(graph, "svc-rpc-api", tmp_path)
 
-    assert len(outputs) == 4
+    assert len(outputs) == 6
     for path in outputs:
         assert path.exists()
         assert path.stat().st_size > 100
     svg = (tmp_path / "service_drilldown_svc-rpc-api.svg").read_text(encoding="utf-8")
+    drawio = ElementTree.parse(tmp_path / "service_drilldown_svc-rpc-api.drawio")
+    graphml = ElementTree.parse(tmp_path / "service_drilldown_svc-rpc-api.graphml")
     assert "Service Drilldown: svc-rpc-api" in svg
     assert "RPC API" in svg
+    assert drawio.findall(".//mxCell")
+    assert graphml.findall(".//{http://graphml.graphdrawing.org/xmlns}edge")
 
 
 def test_service_drilldown_supports_depth_direction_theme_and_risk_focus(tmp_path: Path) -> None:
@@ -342,7 +367,7 @@ def test_service_drilldown_supports_depth_direction_theme_and_risk_focus(tmp_pat
 
     outputs = render_service_drilldown(graph, "svc-rpc-api", tmp_path, depth=2, direction="downstream", theme="dark", risk_focus=True)
 
-    assert len(outputs) == 4
+    assert len(outputs) == 6
     svg = (tmp_path / "service_drilldown_svc-rpc-api.svg").read_text(encoding="utf-8")
     assert "depth=2" in svg
     assert "#101827" in svg
@@ -502,6 +527,8 @@ def test_script_service_drilldown_runs_with_defaults() -> None:
     assert (output_dir / "service_drilldown_svc-rpc-api.png").exists()
     assert (output_dir / "service_drilldown_svc-rpc-api.pdf").exists()
     assert (output_dir / "service_drilldown_svc-rpc-api.mmd").exists()
+    assert (output_dir / "service_drilldown_svc-rpc-api.drawio").exists()
+    assert (output_dir / "service_drilldown_svc-rpc-api.graphml").exists()
 
 
 def test_service_port_query_runs_with_defaults(tmp_path: Path) -> None:
