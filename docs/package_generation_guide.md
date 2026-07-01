@@ -46,7 +46,7 @@ scripts/merge_dcp.sh path/to/DCP_A path/to/DCP_B --output /tmp/dataflow_merge
 
 ## 三、交付内容
 
-交付包包含归一化数据、图模型、丢弃关系审计、分层图、验证报告、风险台账、验收清单、元数据和压缩归档。
+交付包包含归一化数据、图模型、丢弃关系审计、分层图、验证报告、Markdown/JSON 架构问题分析、总览图就绪度、风险台账、验收清单、元数据和压缩归档。
 
 ## 四、服务端口查询
 
@@ -124,7 +124,7 @@ scripts/merge_dcp.sh path/to/DCP_A path/to/DCP_B --output /tmp/dataflow_merge
 
 ## 3. Delivery Content
 
-The package contains normalized data, graph models, dropped-edge audit data, layered diagrams, validation reports, architecture findings, risk registers, acceptance checklists, metadata, and a compressed archive.
+The package contains normalized data, graph models, dropped-edge audit data, layered diagrams, validation reports, architecture findings in Markdown and JSON, executive overview readiness, risk registers, acceptance checklists, metadata, and a compressed archive.
 
 ## 4. Service Port Query
 

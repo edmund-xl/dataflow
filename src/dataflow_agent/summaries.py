@@ -2,17 +2,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .architecture_findings import write_architecture_findings
+from .architecture_findings import build_completeness_findings, write_architecture_findings
 from .models import Finding
 from .pipeline import PipelineState
 
 
 def write_check_summaries(output_root: Path, state: PipelineState) -> None:
     output_root.mkdir(parents=True, exist_ok=True)
-    findings = state.validation.findings + state.risks
+    architecture_findings = build_completeness_findings(state.normalized_workbook, state.graph)
+    architecture_action_findings = [finding.as_finding() for finding in architecture_findings if finding.severity != "Info"]
+    findings = state.validation.findings + state.risks + architecture_action_findings
     blocking = [f for f in findings if f.severity in {"P0", "P1"}]
     pending = [f for f in findings if f.status == "Pending_Confirmation"]
-    _write_summary(output_root / "check_summary.md", state, findings, blocking, pending)
+    _write_summary(output_root / "check_summary.md", state, findings, blocking, pending, architecture_findings)
     _write_fix_list(output_root / "fix_list.md", findings)
     write_architecture_findings(output_root / "architecture_findings.md", state.normalized_workbook, state.graph, state.validation.findings, state.risks)
 
@@ -23,8 +25,10 @@ def _write_summary(
     findings: list[Finding],
     blocking: list[Finding],
     pending: list[Finding],
+    architecture_findings: list,
 ) -> None:
     status = "PASS" if not blocking else "NEEDS_FIX"
+    arch_counts = _architecture_counts(architecture_findings)
     submit_cn = "可以提交给数据汇总负责人。" if status == "PASS" else "暂不建议提交；请先处理 P0/P1 或阻断级问题。"
     submit_en = "Ready to submit to the data aggregation owner." if status == "PASS" else "Do not submit yet; resolve P0/P1 or blocking findings first."
     lines = [
@@ -46,6 +50,7 @@ def _write_summary(
         f"- 关系数量：{len(state.graph.edges)}",
         f"- 校验问题数量：{len(state.validation.findings)}",
         f"- 风险问题数量：{len(state.risks)}",
+        f"- 架构完整性发现：P0={arch_counts['P0']}，P1={arch_counts['P1']}，P2={arch_counts['P2']}，Info={arch_counts['Info']}",
         f"- 阻断问题数量：{len(blocking)}",
         f"- 待确认问题数量：{len(pending)}",
         f"- 丢弃关系数量：{len(state.graph.dropped_edges)}",
@@ -78,6 +83,7 @@ def _write_summary(
         f"- Graph edges: {len(state.graph.edges)}",
         f"- Validation findings: {len(state.validation.findings)}",
         f"- Risk findings: {len(state.risks)}",
+        f"- Architecture findings: P0={arch_counts['P0']}, P1={arch_counts['P1']}, P2={arch_counts['P2']}, Info={arch_counts['Info']}",
         f"- Blocking findings: {len(blocking)}",
         f"- Pending confirmation findings: {len(pending)}",
         f"- Dropped graph edges: {len(state.graph.dropped_edges)}",
@@ -198,6 +204,14 @@ def _severity_order(severity: str) -> int:
     return {"P0": 0, "P1": 1, "P2": 2, "P3": 3, "Info": 4}.get(severity, 9)
 
 
+def _architecture_counts(findings: list) -> dict[str, int]:
+    counts = {"P0": 0, "P1": 0, "P2": 0, "P3": 0, "Info": 0}
+    for finding in findings:
+        severity = getattr(finding, "severity", "")
+        counts[severity] = counts.get(severity, 0) + 1
+    return counts
+
+
 def _gate_cn(gate: str) -> str:
     return {
         "Gate 1": "门禁一",
@@ -205,6 +219,7 @@ def _gate_cn(gate: str) -> str:
         "Gate 3": "门禁三",
         "Gate 4": "门禁四",
         "Gate 5": "门禁五",
+        "Architecture": "架构完整性",
     }.get(gate, gate)
 
 

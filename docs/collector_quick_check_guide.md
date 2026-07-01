@@ -55,6 +55,7 @@ path/to/DCP_v0.1/agent_check/
 check_summary.md
 fix_list.md
 architecture_findings.md
+architecture_findings.json
 reports/validation_report.xlsx
 reports/issue_risk_register.xlsx
 reports/logic_mapping_validation_report.docx
@@ -62,7 +63,7 @@ reports/logic_mapping_validation_report.docx
 
 ## 五、结果判读
 
-首先阅读 `check_summary.md`。如果状态为 `PASS`，说明没有阻断级校验问题。如果状态为 `NEEDS_FIX`，应阅读 `fix_list.md`，逐项修正源工作簿，再重新执行自检脚本。需要综合判断服务、依赖、数据资产、外部系统、网络、安全、监控、IAM、CI/CD 和证据问题时，阅读 `architecture_findings.md`；它直接基于 Excel/DCP 生成的 graph model，不要求先看图，并会列出自动化问题和需要人工复核的审查观察项。
+首先阅读 `check_summary.md`。如果状态为 `PASS`，说明没有 P0/P1 阻断级问题。如果状态为 `NEEDS_FIX`，应阅读 `fix_list.md`，逐项修正源工作簿，再重新执行自检脚本。需要综合判断服务、依赖、数据资产、外部系统、网络、安全、监控、IAM、CI/CD 和证据问题时，阅读 `architecture_findings.md`；它直接基于 Excel/DCP 生成的 graph model，不要求先看图，并会列出总览图就绪度、覆盖矩阵、缺失与风险清单、自动化问题和需要人工复核的审查观察项。`architecture_findings.json` 提供同等内容的机器可读版本。
 
 ## 六、开源授权
 
@@ -135,6 +136,7 @@ Main files include:
 check_summary.md
 fix_list.md
 architecture_findings.md
+architecture_findings.json
 reports/validation_report.xlsx
 reports/issue_risk_register.xlsx
 reports/logic_mapping_validation_report.docx
@@ -142,7 +144,7 @@ reports/logic_mapping_validation_report.docx
 
 ## 5. Result Interpretation
 
-Read `check_summary.md` first. If the status is `PASS`, there is no blocking validation issue. If the status is `NEEDS_FIX`, read `fix_list.md`, correct the source workbook item by item, and run the self-check script again. To review service, dependency, data asset, external system, network, security, monitoring, IAM, CI/CD, and evidence issues, read `architecture_findings.md`; it is based directly on the graph model generated from the Excel/DCP source, does not require reading diagrams first, and lists both automated findings and human-review observations.
+Read `check_summary.md` first. If the status is `PASS`, there is no P0/P1 blocking issue. If the status is `NEEDS_FIX`, read `fix_list.md`, correct the source workbook item by item, and run the self-check script again. To review service, dependency, data asset, external system, network, security, monitoring, IAM, CI/CD, and evidence issues, read `architecture_findings.md`; it is based directly on the graph model generated from the Excel/DCP source, does not require reading diagrams first, and lists executive overview readiness, the coverage matrix, missing information and risk list, automated findings, and human-review observations. `architecture_findings.json` provides the same content in machine-readable form.
 
 ## 6. Open-Source License
 

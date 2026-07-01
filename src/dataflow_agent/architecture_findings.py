@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from .models import Finding, GraphEdge, GraphModel, GraphNode, WorkbookData
+from .models import Finding, GraphEdge, GraphModel, GraphNode, Row, WorkbookData
 from .normalizer import active_rows
 
 
@@ -20,6 +21,48 @@ class ReviewObservation:
     message_en: str
 
 
+@dataclass(frozen=True)
+class ArchitectureFinding:
+    severity: str
+    category: str
+    sheet: str
+    row_id: str
+    field: str
+    message_cn: str
+    message_en: str
+    suggested_action_cn: str
+    suggested_action_en: str
+    evidence_id: str = ""
+    source: str = "architecture"
+
+    def as_dict(self) -> dict[str, str]:
+        return {
+            "severity": self.severity,
+            "category": self.category,
+            "sheet": self.sheet,
+            "row_id": self.row_id,
+            "field": self.field,
+            "message_cn": self.message_cn,
+            "message_en": self.message_en,
+            "suggested_action_cn": self.suggested_action_cn,
+            "suggested_action_en": self.suggested_action_en,
+            "evidence_id": self.evidence_id,
+            "source": self.source,
+        }
+
+    def as_finding(self) -> Finding:
+        return Finding(
+            "Architecture",
+            self.severity,
+            self.sheet,
+            self.row_id,
+            self.field,
+            self.message_en,
+            self.suggested_action_en,
+            evidence_id=self.evidence_id,
+        )
+
+
 def write_architecture_findings(
     path: Path,
     workbook: WorkbookData,
@@ -28,17 +71,47 @@ def write_architecture_findings(
     risk_findings: list[Finding],
 ) -> None:
     findings = validation_findings + risk_findings
+    architecture_findings = build_architecture_findings(workbook, graph, validation_findings, risk_findings)
+    completeness_findings = build_completeness_findings(workbook, graph)
     dataflow_edges = [edge for edge in graph.edges if edge.type in DATAFLOW_EDGE_TYPES]
-    blocking = [finding for finding in findings if finding.severity in {"P0", "P1"}]
+    blocking = [finding for finding in architecture_findings if finding.severity in {"P0", "P1"}]
     pending = [finding for finding in findings if finding.status == "Pending_Confirmation"]
     observations = _review_observations(workbook, graph)
-    conclusion = _conclusion(findings)
+    coverage = _coverage_matrix(architecture_findings, observations)
+    conclusion = _architecture_conclusion(architecture_findings, pending)
     lines: list[str] = []
-    _append_chinese(lines, workbook, graph, findings, dataflow_edges, blocking, pending, observations, conclusion)
+    _append_chinese(lines, workbook, graph, findings, architecture_findings, completeness_findings, dataflow_edges, blocking, pending, observations, coverage, conclusion)
     lines.extend(["---", ""])
-    _append_english(lines, workbook, graph, findings, dataflow_edges, blocking, pending, observations, conclusion)
+    _append_english(lines, workbook, graph, findings, architecture_findings, completeness_findings, dataflow_edges, blocking, pending, observations, coverage, conclusion)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines), encoding="utf-8")
+    _write_architecture_json(path.with_suffix(".json"), conclusion, architecture_findings, completeness_findings, observations, coverage, dataflow_edges, graph)
+
+
+def build_architecture_findings(
+    workbook: WorkbookData,
+    graph: GraphModel,
+    validation_findings: list[Finding],
+    risk_findings: list[Finding],
+) -> list[ArchitectureFinding]:
+    return [_from_finding(finding) for finding in validation_findings + risk_findings] + build_completeness_findings(workbook, graph)
+
+
+def build_completeness_findings(workbook: WorkbookData, graph: GraphModel) -> list[ArchitectureFinding]:
+    findings: list[ArchitectureFinding] = []
+    findings.extend(_overview_readiness_findings(workbook, graph))
+    findings.extend(_graph_completeness_findings(graph))
+    findings.extend(_service_completeness_findings(workbook, graph))
+    findings.extend(_dependency_completeness_findings(workbook))
+    findings.extend(_data_asset_completeness_findings(workbook))
+    findings.extend(_external_service_completeness_findings(workbook))
+    findings.extend(_network_completeness_findings(workbook))
+    findings.extend(_firewall_completeness_findings(workbook))
+    findings.extend(_iam_completeness_findings(workbook))
+    findings.extend(_monitoring_completeness_findings(workbook))
+    findings.extend(_cicd_completeness_findings(workbook))
+    findings.extend(_issue_evidence_completeness_findings(workbook))
+    return findings
 
 
 def _append_chinese(
@@ -46,12 +119,16 @@ def _append_chinese(
     workbook: WorkbookData,
     graph: GraphModel,
     findings: list[Finding],
+    architecture_findings: list[ArchitectureFinding],
+    completeness_findings: list[ArchitectureFinding],
     dataflow_edges: list[GraphEdge],
-    blocking: list[Finding],
+    blocking: list[ArchitectureFinding],
     pending: list[Finding],
     observations: list[ReviewObservation],
+    coverage: list[dict[str, str]],
     conclusion: str,
 ) -> None:
+    severity_counts = _severity_counts(architecture_findings)
     lines.extend(
         [
             "# 中文版本",
@@ -63,6 +140,8 @@ def _append_chinese(
             f"- 分析结论：`{conclusion}`",
             f"- 输入工作簿：`{workbook.path}`",
             f"- 必须处理的问题：{len(blocking)}",
+            f"- 缺失/风险发现：P0={severity_counts['P0']}，P1={severity_counts['P1']}，P2={severity_counts['P2']}，Info={severity_counts['Info']}",
+            f"- 新增完整性发现：{len(completeness_findings)}",
             f"- 待确认记录：{len(pending)}",
             f"- 丢弃关系：{len(graph.dropped_edges)}",
             f"- 真实数据流关系：{len(dataflow_edges)}",
@@ -77,9 +156,11 @@ def _append_chinese(
         ]
     )
     _append_dataflow_edges_cn(lines, graph, dataflow_edges)
+    _append_coverage_matrix_cn(lines, coverage)
+    _append_architecture_findings_cn(lines, architecture_findings)
     _append_observations_cn(lines, observations)
     lines.extend(["## 问题分组", ""])
-    _append_category_cn(lines, "必须优先处理", blocking)
+    _append_category_cn(lines, "必须优先处理", [finding.as_finding() for finding in blocking])
     _append_category_cn(lines, "待确认或例外", pending)
     _append_category_cn(lines, "安全与访问控制", _category_findings(findings, ["firewall", "iam", "privilege", "cloud armor", "ingress", "egress", "nat", "psc", "peering"]))
     _append_category_cn(lines, "监控覆盖", _category_findings(findings, ["monitoring", "dashboard", "logging", "alert", "coverage"]))
@@ -127,12 +208,16 @@ def _append_english(
     workbook: WorkbookData,
     graph: GraphModel,
     findings: list[Finding],
+    architecture_findings: list[ArchitectureFinding],
+    completeness_findings: list[ArchitectureFinding],
     dataflow_edges: list[GraphEdge],
-    blocking: list[Finding],
+    blocking: list[ArchitectureFinding],
     pending: list[Finding],
     observations: list[ReviewObservation],
+    coverage: list[dict[str, str]],
     conclusion: str,
 ) -> None:
+    severity_counts = _severity_counts(architecture_findings)
     lines.extend(
         [
             "# English Version",
@@ -144,6 +229,8 @@ def _append_english(
             f"- Analysis conclusion: `{conclusion}`",
             f"- Input workbook: `{workbook.path}`",
             f"- Must-fix findings: {len(blocking)}",
+            f"- Completeness/risk findings: P0={severity_counts['P0']}, P1={severity_counts['P1']}, P2={severity_counts['P2']}, Info={severity_counts['Info']}",
+            f"- New completeness findings: {len(completeness_findings)}",
             f"- Pending records: {len(pending)}",
             f"- Dropped edges: {len(graph.dropped_edges)}",
             f"- Real dataflow edges: {len(dataflow_edges)}",
@@ -158,9 +245,11 @@ def _append_english(
         ]
     )
     _append_dataflow_edges_en(lines, graph, dataflow_edges)
+    _append_coverage_matrix_en(lines, coverage)
+    _append_architecture_findings_en(lines, architecture_findings)
     _append_observations_en(lines, observations)
     lines.extend(["## Finding Groups", ""])
-    _append_category_en(lines, "Must Fix First", blocking)
+    _append_category_en(lines, "Must Fix First", [finding.as_finding() for finding in blocking])
     _append_category_en(lines, "Pending Or Exceptions", pending)
     _append_category_en(lines, "Security And Access Control", _category_findings(findings, ["firewall", "iam", "privilege", "cloud armor", "ingress", "egress", "nat", "psc", "peering"]))
     _append_category_en(lines, "Monitoring Coverage", _category_findings(findings, ["monitoring", "dashboard", "logging", "alert", "coverage"]))
@@ -251,6 +340,100 @@ def _append_dataflow_edges_en(lines: list[str], graph: GraphModel, edges: list[G
     lines.append("")
 
 
+def _append_coverage_matrix_cn(lines: list[str], coverage: list[dict[str, str]]) -> None:
+    lines.extend(["## 覆盖矩阵", "", "| 类别 | 状态 | P0 | P1 | P2 | Info | 说明 |", "| --- | --- | --- | --- | --- | --- | --- |"])
+    for row in coverage:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _cell(row["category"]),
+                    _cell(row["status_cn"]),
+                    _cell(row["P0"]),
+                    _cell(row["P1"]),
+                    _cell(row["P2"]),
+                    _cell(row["Info"]),
+                    _cell(row["summary_cn"]),
+                ]
+            )
+            + " |"
+        )
+    lines.append("")
+
+
+def _append_coverage_matrix_en(lines: list[str], coverage: list[dict[str, str]]) -> None:
+    lines.extend(["## Coverage Matrix", "", "| Category | Status | P0 | P1 | P2 | Info | Summary |", "| --- | --- | --- | --- | --- | --- | --- |"])
+    for row in coverage:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _cell(row["category"]),
+                    _cell(row["status_en"]),
+                    _cell(row["P0"]),
+                    _cell(row["P1"]),
+                    _cell(row["P2"]),
+                    _cell(row["Info"]),
+                    _cell(row["summary_en"]),
+                ]
+            )
+            + " |"
+        )
+    lines.append("")
+
+
+def _append_architecture_findings_cn(lines: list[str], findings: list[ArchitectureFinding]) -> None:
+    lines.extend(["## 缺失与风险清单", "", "| Severity | Category | Sheet | Row_ID | Field | 问题 | 建议 | Evidence_ID |", "| --- | --- | --- | --- | --- | --- | --- | --- |"])
+    actionable = [finding for finding in findings if finding.severity != "Info"]
+    if not actionable:
+        lines.append("| PASS | N/A | N/A | N/A | N/A | 未发现需要处理的完整性或风险问题。 | 保留人工复核。 | N/A |")
+    else:
+        for finding in sorted(actionable, key=_architecture_finding_sort_key):
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        _cell(finding.severity),
+                        _cell(finding.category),
+                        _cell(finding.sheet),
+                        _cell(finding.row_id or "N/A"),
+                        _cell(finding.field or "N/A"),
+                        _cell(finding.message_cn),
+                        _cell(finding.suggested_action_cn),
+                        _cell(finding.evidence_id or "N/A"),
+                    ]
+                )
+                + " |"
+            )
+    lines.append("")
+
+
+def _append_architecture_findings_en(lines: list[str], findings: list[ArchitectureFinding]) -> None:
+    lines.extend(["## Missing Information And Risk List", "", "| Severity | Category | Sheet | Row_ID | Field | Message | Suggested action | Evidence_ID |", "| --- | --- | --- | --- | --- | --- | --- | --- |"])
+    actionable = [finding for finding in findings if finding.severity != "Info"]
+    if not actionable:
+        lines.append("| PASS | N/A | N/A | N/A | N/A | No actionable completeness or risk findings were detected. | Keep manual review. | N/A |")
+    else:
+        for finding in sorted(actionable, key=_architecture_finding_sort_key):
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        _cell(finding.severity),
+                        _cell(finding.category),
+                        _cell(finding.sheet),
+                        _cell(finding.row_id or "N/A"),
+                        _cell(finding.field or "N/A"),
+                        _cell(finding.message_en),
+                        _cell(finding.suggested_action_en),
+                        _cell(finding.evidence_id or "N/A"),
+                    ]
+                )
+                + " |"
+            )
+    lines.append("")
+
+
 def _append_observations_cn(lines: list[str], observations: list[ReviewObservation]) -> None:
     lines.extend(["## 审查观察项", ""])
     if not observations:
@@ -326,8 +509,234 @@ def _category_findings(findings: list[Finding], keywords: list[str]) -> list[Fin
     return selected
 
 
+def _from_finding(finding: Finding) -> ArchitectureFinding:
+    return ArchitectureFinding(
+        finding.severity,
+        _category_from_sheet(finding.sheet),
+        finding.sheet,
+        finding.row_id,
+        finding.field,
+        _cn_message(finding),
+        finding.message,
+        _cn_action(finding),
+        finding.suggested_action or "Review and correct the source workbook.",
+        finding.evidence_id,
+        source="validation_or_risk",
+    )
+
+
+def _graph_completeness_findings(graph: GraphModel) -> list[ArchitectureFinding]:
+    findings: list[ArchitectureFinding] = []
+    if not graph.nodes:
+        findings.append(_arch("P0", "Graph", "normalized", "", "nodes", "Graph has no nodes.", "图模型没有节点，生成产物不可信。", "Rebuild from a workbook with valid in-scope records.", "补充有效的源表记录后重新生成。"))
+    if not graph.edges:
+        findings.append(_arch("P0", "Graph", "normalized", "", "edges", "Graph has no edges.", "图模型没有关系，无法进行数据流分析。", "Add valid dependencies, runtime, monitoring, security, or delivery relationships.", "补充有效依赖、运行、监控、安全或交付关系。"))
+    if not any(edge.type in DATAFLOW_EDGE_TYPES for edge in graph.edges):
+        findings.append(_arch("P0", "Graph", "normalized", "", "edges", "Graph has no real dataflow edges.", "图模型没有真实数据流关系。", "Add calls, external calls, reads, or writes in the workbook.", "在工作簿中补充 calls、external calls、reads 或 writes 关系。"))
+    return findings
+
+
+def _overview_readiness_findings(workbook: WorkbookData, graph: GraphModel) -> list[ArchitectureFinding]:
+    missing = _overview_readiness_missing(workbook, graph)
+    if not missing:
+        return []
+    return [
+        _arch(
+            "P2",
+            "Executive Overview",
+            "workbook",
+            "",
+            "overview_readiness",
+            "Executive overview is not ready for a demo-level summary because required source information is missing or incomplete: "
+            + "; ".join(item["en"] for item in missing)
+            + ".",
+            "当前数据还不足以支撑示例级总览图，缺失或不完整的信息包括："
+            + "；".join(item["cn"] for item in missing)
+            + "。",
+            "Complete the listed workbook sheets and rerun the agent. Do not add inferred lines or diagram-only nodes.",
+            "补齐上述源工作簿信息后重新运行 Agent；不要在图里补推断线或仅用于展示的节点。",
+        )
+    ]
+
+
+def _service_completeness_findings(workbook: WorkbookData, graph: GraphModel) -> list[ArchitectureFinding]:
+    findings: list[ArchitectureFinding] = []
+    monitored = _monitored_object_ids(workbook)
+    dataflow_connected = _dataflow_connected_ids(graph)
+    for row in active_rows(workbook, "04_Services"):
+        service_id = row.get("Service_ID", "")
+        if row.get("Service_Priority") in {"P0", "P1"}:
+            if not row.get("Service_Owner"):
+                findings.append(_row_arch("P1", "Service", "04_Services", row, "Service_Owner", f"Critical service {service_id} has no Service_Owner.", f"关键服务 `{service_id}` 未填写 Service_Owner。", "Fill Service_Owner so accountability is clear.", "补充 Service_Owner，明确负责人。"))
+            if not row.get("Listen_Ports"):
+                findings.append(_row_arch("P1", "Service", "04_Services", row, "Listen_Ports", f"Critical service {service_id} has no Listen_Ports.", f"关键服务 `{service_id}` 未填写 Listen_Ports。", "Fill the listening ports or document why it has no listener.", "补充监听端口，或说明该服务无监听端口的原因。"))
+            if not row.get("Running_On_Instance_ID"):
+                findings.append(_row_arch("P1", "Service", "04_Services", row, "Running_On_Instance_ID", f"Critical service {service_id} has no runtime instance.", f"关键服务 `{service_id}` 未关联运行实例。", "Link the service to a server/runtime record.", "关联服务运行的服务器或 runtime 记录。"))
+            if service_id not in monitored:
+                findings.append(_row_arch("P1", "Service", "04_Services", row, "Service_ID", f"Critical service {service_id} has no monitoring coverage.", f"关键服务 `{service_id}` 没有监控覆盖记录。", "Add a 10_Monitoring row for the service.", "在 10_Monitoring 中补充该服务的监控记录。"))
+            if service_id not in dataflow_connected:
+                findings.append(_row_arch("P2", "Service", "04_Services", row, "Service_ID", f"Critical service {service_id} has no dataflow in/out edge.", f"关键服务 `{service_id}` 没有数据流入/流出关系。", "Confirm whether the service is isolated or add missing dependencies.", "确认该服务是否孤立；如不是，补充依赖关系。"))
+        if not row.get("Evidence_ID"):
+            findings.append(_row_arch("P2", "Service", "04_Services", row, "Evidence_ID", f"Service {service_id} has no Evidence_ID.", f"服务 `{service_id}` 未填写 Evidence_ID。", "Link evidence for this service inventory row.", "为服务清单记录关联证据。"))
+    return findings
+
+
+def _dependency_completeness_findings(workbook: WorkbookData) -> list[ArchitectureFinding]:
+    findings: list[ArchitectureFinding] = []
+    firewalls = _firewalls_by_dependency(workbook)
+    monitored = _monitored_object_ids(workbook)
+    has_egress_path = _has_egress_path(workbook)
+    for row in active_rows(workbook, "05_Dependencies"):
+        dep_id = row.get("Dependency_ID", "")
+        critical = row.get("Dependency_Criticality") in {"P0", "P1"}
+        if not (row.get("Target_Service_ID") or row.get("Target_External_ID") or row.get("Target_Data_Asset_ID") or row.get("Target_ID")):
+            findings.append(_row_arch("P1" if critical else "P2", "Dependency", "05_Dependencies", row, "Target_ID", f"Dependency {dep_id} has no explicit target.", f"依赖 `{dep_id}` 没有明确目标。", "Fill a target service, external system, data asset, or explicit Target_ID.", "补充目标服务、外部系统、数据资产或 Target_ID。"))
+        if critical and not firewalls.get(dep_id):
+            findings.append(_row_arch("P1", "Dependency", "05_Dependencies", row, "Dependency_ID", f"Critical dependency {dep_id} has no related firewall rule.", f"关键依赖 `{dep_id}` 未关联 Firewall 规则。", "Link a 07_Firewalls row through Related_Dependency_ID or document the exception.", "通过 Related_Dependency_ID 关联防火墙规则，或记录例外说明。"))
+        if critical and dep_id not in monitored:
+            findings.append(_row_arch("P2", "Dependency", "05_Dependencies", row, "Dependency_ID", f"Critical dependency {dep_id} has no direct monitoring coverage.", f"关键依赖 `{dep_id}` 没有直接监控覆盖。", "Add dependency-level monitoring or document service-level coverage.", "补充依赖级监控，或说明由服务级监控覆盖。"))
+        if not row.get("Auth_Method"):
+            findings.append(_row_arch("P2", "Dependency", "05_Dependencies", row, "Auth_Method", f"Dependency {dep_id} has no Auth_Method.", f"依赖 `{dep_id}` 未填写 Auth_Method。", "Fill the authentication or trust model.", "补充认证方式或信任模型。"))
+        if row.get("Target_External_ID") and not has_egress_path:
+            findings.append(_row_arch("P2", "Dependency", "05_Dependencies", row, "Target_External_ID", f"External dependency {dep_id} has no recorded NAT/PSC/Peering egress path.", f"外部依赖 `{dep_id}` 没有记录 NAT/PSC/Peering 出站路径。", "Add network egress details or document why direct egress is acceptable.", "补充网络出站路径，或说明直接出站可接受的原因。"))
+    return findings
+
+
+def _data_asset_completeness_findings(workbook: WorkbookData) -> list[ArchitectureFinding]:
+    findings: list[ArchitectureFinding] = []
+    monitored = _monitored_object_ids(workbook)
+    for row in active_rows(workbook, "06_Data_Assets"):
+        asset_id = row.get("Data_Asset_ID", "")
+        sensitive = row.get("Sensitivity", "").lower() in {"restricted", "high", "critical"}
+        if not row.get("Used_By_Service_ID"):
+            findings.append(_row_arch("P2", "Data Asset", "06_Data_Assets", row, "Used_By_Service_ID", f"Data asset {asset_id} has no Used_By_Service_ID.", f"数据资产 `{asset_id}` 未填写 Used_By_Service_ID。", "Link the services that read or write this asset.", "关联读取或写入该资产的服务。"))
+        if not row.get("Access_Method"):
+            findings.append(_row_arch("P2", "Data Asset", "06_Data_Assets", row, "Access_Method", f"Data asset {asset_id} has no Access_Method.", f"数据资产 `{asset_id}` 未填写 Access_Method。", "Fill database/storage access method and port if applicable.", "补充数据库或存储访问方式及端口。"))
+        if not row.get("Sensitivity"):
+            findings.append(_row_arch("P2", "Data Asset", "06_Data_Assets", row, "Sensitivity", f"Data asset {asset_id} has no Sensitivity.", f"数据资产 `{asset_id}` 未填写 Sensitivity。", "Classify the data sensitivity.", "补充数据敏感性分类。"))
+        if not row.get("Backup_Policy"):
+            findings.append(_row_arch("P2", "Data Asset", "06_Data_Assets", row, "Backup_Policy", f"Data asset {asset_id} has no Backup_Policy.", f"数据资产 `{asset_id}` 未填写 Backup_Policy。", "Document backup or explicitly mark not applicable.", "补充备份策略，或明确标记不适用。"))
+        if sensitive and asset_id not in monitored:
+            findings.append(_row_arch("P1", "Data Asset", "06_Data_Assets", row, "Data_Asset_ID", f"Sensitive data asset {asset_id} has no monitoring coverage.", f"敏感数据资产 `{asset_id}` 没有监控覆盖。", "Add monitoring/logging/alert coverage for the asset.", "为该资产补充监控、日志或告警覆盖。"))
+    return findings
+
+
+def _external_service_completeness_findings(workbook: WorkbookData) -> list[ArchitectureFinding]:
+    findings: list[ArchitectureFinding] = []
+    for row in active_rows(workbook, "12_External_Services"):
+        external_id = row.get("External_ID", "")
+        for field, cn_label in [("Auth_Method", "Auth_Method"), ("Purpose", "Purpose"), ("Data_Classification", "Data_Classification"), ("Used_By_Service_ID", "Used_By_Service_ID")]:
+            if not row.get(field):
+                findings.append(_row_arch("P2", "External Service", "12_External_Services", row, field, f"External service {external_id} has no {field}.", f"外部系统 `{external_id}` 未填写 {cn_label}。", f"Fill {field} for external dependency review.", f"补充 {cn_label}，用于外部依赖复核。"))
+    return findings
+
+
+def _network_completeness_findings(workbook: WorkbookData) -> list[ArchitectureFinding]:
+    findings: list[ArchitectureFinding] = []
+    rows = active_rows(workbook, "02_Networks")
+    external_deps = [row for row in active_rows(workbook, "05_Dependencies") if row.get("Target_External_ID")]
+    if external_deps and not _has_egress_path(workbook):
+        findings.append(_arch("P2", "Network", "02_Networks", "", "NAT_Name", "External dependencies exist but no NAT/PSC/Peering path is recorded.", "存在外部依赖，但网络记录中没有 NAT/PSC/Peering 出站路径。", "Document the egress path in 02_Networks.", "在 02_Networks 中补充出站路径。"))
+    for row in rows:
+        if not row.get("Subnet_Name"):
+            findings.append(_row_arch("P2", "Network", "02_Networks", row, "Subnet_Name", f"Network {row.get('Network_ID')} has no Subnet_Name.", f"网络 `{row.get('Network_ID')}` 未填写 Subnet_Name。", "Fill the subnet boundary or mark not applicable in notes.", "补充 subnet 边界，或在备注说明不适用。"))
+        if not row.get("CIDR"):
+            findings.append(_row_arch("P2", "Network", "02_Networks", row, "CIDR", f"Network {row.get('Network_ID')} has no CIDR.", f"网络 `{row.get('Network_ID')}` 未填写 CIDR。", "Fill CIDR for boundary review.", "补充 CIDR 以支持边界复核。"))
+    return findings
+
+
+def _firewall_completeness_findings(workbook: WorkbookData) -> list[ArchitectureFinding]:
+    findings: list[ArchitectureFinding] = []
+    issues = _issues_by_object(workbook)
+    for row in active_rows(workbook, "07_Firewalls"):
+        fw_id = row.get("Firewall_ID", "")
+        wide_open = row.get("Direction", "").lower() == "ingress" and "0.0.0.0/0" in row.get("Source_Allowed", "")
+        accepted = row.get("Confirmation_Status") == "Accepted_Exception"
+        if wide_open and not accepted:
+            findings.append(_row_arch("P1", "Firewall", "07_Firewalls", row, "Source_Allowed", f"Firewall {fw_id} allows ingress from 0.0.0.0/0 without Accepted_Exception status.", f"Firewall `{fw_id}` 允许 0.0.0.0/0 入站，但未标记为 Accepted_Exception。", "Restrict the source range or record an accepted exception with evidence.", "收敛来源范围，或记录带证据的已接受例外。"))
+        if accepted:
+            issue = issues.get(fw_id)
+            if not issue:
+                findings.append(_row_arch("P1", "Firewall", "07_Firewalls", row, "Confirmation_Status", f"Accepted exception firewall {fw_id} has no linked issue record.", f"已接受例外 Firewall `{fw_id}` 没有关联 Issue 记录。", "Add a 13_Issues_Exceptions row for this exception.", "在 13_Issues_Exceptions 中补充该例外记录。"))
+            else:
+                missing_fields = [field for field in ("Owner", "Due_Date", "Related_Evidence_ID") if not issue.get(field)]
+                if missing_fields:
+                    findings.append(_arch("P2", "Firewall", "13_Issues_Exceptions", issue.get("Issue_ID", ""), ",".join(missing_fields), f"Accepted exception for firewall {fw_id} is missing {', '.join(missing_fields)}.", f"Firewall `{fw_id}` 的已接受例外缺少 {', '.join(missing_fields)}。", "Complete owner, due date, and evidence for exception governance.", "补充负责人、到期时间和证据，便于例外治理。", issue.get("Related_Evidence_ID", "")))
+    return findings
+
+
+def _iam_completeness_findings(workbook: WorkbookData) -> list[ArchitectureFinding]:
+    rows = active_rows(workbook, "09_IAM_SA")
+    if not rows:
+        return [_arch("P2", "IAM", "09_IAM_SA", "", "IAM_Binding_ID", "No IAM / Service Account records are present.", "未提供 IAM / Service Account 记录，无法评估权限链路。", "Collect IAM bindings or explicitly document why IAM is out of scope.", "补充 IAM 绑定信息，或明确说明权限链路不在本次范围内。")]
+    findings: list[ArchitectureFinding] = []
+    usage: dict[str, int] = {}
+    for row in rows:
+        if row.get("Service_Account_ID"):
+            usage[row["Service_Account_ID"]] = usage.get(row["Service_Account_ID"], 0) + len([item for item in row.get("Used_By_Service_ID", "").split(";") if item.strip()])
+    for row in rows:
+        role = row.get("Role", "")
+        role_lower = role.lower()
+        high = row.get("Is_High_Privilege", "").lower() == "yes" or role_lower in {"owner", "editor"} or role_lower.endswith("/owner") or "admin" in role_lower or "*" in role
+        if high and not row.get("Justification"):
+            findings.append(_row_arch("P1", "IAM", "09_IAM_SA", row, "Justification", f"High privilege IAM binding {row.get('IAM_Binding_ID')} has no justification.", f"高权限 IAM 绑定 `{row.get('IAM_Binding_ID')}` 未填写 Justification。", "Document least-privilege reason, scope, and approver.", "补充最小权限原因、范围和审批人。"))
+        if row.get("Service_Account_ID") and usage.get(row["Service_Account_ID"], 0) > 1 and not row.get("Justification"):
+            findings.append(_row_arch("P2", "IAM", "09_IAM_SA", row, "Service_Account_ID", f"Shared service account {row.get('Service_Account_ID')} has no justification.", f"共享服务账号 `{row.get('Service_Account_ID')}` 未填写 Justification。", "Document why the service account is shared or split it by service.", "说明共享原因，或按服务拆分账号。"))
+    return findings
+
+
+def _monitoring_completeness_findings(workbook: WorkbookData) -> list[ArchitectureFinding]:
+    findings: list[ArchitectureFinding] = []
+    for row in active_rows(workbook, "10_Monitoring"):
+        monitoring_id = row.get("Monitoring_ID", "")
+        if row.get("Coverage_Status") in {"Missing", "Unknown"}:
+            findings.append(_row_arch("P2", "Monitoring", "10_Monitoring", row, "Coverage_Status", f"Monitoring {monitoring_id} is {row.get('Coverage_Status')}.", f"监控 `{monitoring_id}` 覆盖状态为 {row.get('Coverage_Status')}。", "Confirm and update monitoring coverage.", "确认并更新监控覆盖。"))
+        if row.get("Coverage_Status") == "Partial":
+            missing = [field for field in ("Dashboard_URL", "Alert_Rule", "Logging_Coverage", "XDR_Coverage") if not row.get(field) or row.get(field) in {"Unknown", "Not confirmed in repo"}]
+            if missing:
+                findings.append(_row_arch("P2", "Monitoring", "10_Monitoring", row, ",".join(missing), f"Partial monitoring {monitoring_id} is missing or has unconfirmed controls: {', '.join(missing)}.", f"Partial 监控 `{monitoring_id}` 存在缺失或未确认控制项：{', '.join(missing)}。", "Complete dashboard, alert, logging, and XDR coverage evidence or document gaps.", "补充 dashboard、alert、logging、XDR 证据，或记录缺口。"))
+    return findings
+
+
+def _cicd_completeness_findings(workbook: WorkbookData) -> list[ArchitectureFinding]:
+    findings: list[ArchitectureFinding] = []
+    for row in active_rows(workbook, "11_CICD"):
+        cicd_id = row.get("CICD_ID", "")
+        for field in ("Deployment_Account", "Runner", "Artifact_Registry"):
+            if not row.get(field):
+                findings.append(_row_arch("P2", "CI/CD", "11_CICD", row, field, f"CI/CD record {cicd_id} has no {field}.", f"CI/CD 记录 `{cicd_id}` 未填写 {field}。", f"Fill {field} for delivery-chain review.", f"补充 {field}，用于交付链路复核。"))
+        if row.get("Approval_Required") in {"", "No", "Not_Required"}:
+            findings.append(_row_arch("P2", "CI/CD", "11_CICD", row, "Approval_Required", f"CI/CD record {cicd_id} does not show required approval.", f"CI/CD 记录 `{cicd_id}` 未体现审批要求。", "Confirm deployment approval requirements.", "确认部署审批要求。"))
+        if not (row.get("Target_Service_ID") or row.get("Target_Instance_ID")):
+            findings.append(_row_arch("P2", "CI/CD", "11_CICD", row, "Target_Service_ID", f"CI/CD record {cicd_id} has no deployment target.", f"CI/CD 记录 `{cicd_id}` 未关联部署目标。", "Link the deployment to a target service or instance.", "关联部署目标服务或实例。"))
+    return findings
+
+
+def _issue_evidence_completeness_findings(workbook: WorkbookData) -> list[ArchitectureFinding]:
+    findings: list[ArchitectureFinding] = []
+    for row in active_rows(workbook, "13_Issues_Exceptions"):
+        issue_id = row.get("Issue_ID", "")
+        if row.get("Status") == "Accepted_Exception":
+            missing = [field for field in ("Owner", "Due_Date", "Related_Evidence_ID") if not row.get(field)]
+            if missing:
+                findings.append(_row_arch("P2", "Issue", "13_Issues_Exceptions", row, ",".join(missing), f"Accepted exception {issue_id} is missing governance fields: {', '.join(missing)}.", f"已接受例外 `{issue_id}` 缺少治理字段：{', '.join(missing)}。", "Complete owner, due date, and evidence.", "补充负责人、到期时间和证据。", evidence_id=row.get("Related_Evidence_ID", "")))
+    for row in active_rows(workbook, "14_Evidence_Index"):
+        if not row.get("Integrity_Note"):
+            findings.append(_row_arch("P2", "Evidence", "14_Evidence_Index", row, "Integrity_Note", f"Evidence {row.get('Evidence_ID')} has no Integrity_Note.", f"证据 `{row.get('Evidence_ID')}` 未填写 Integrity_Note。", "Add a short integrity or retention note.", "补充完整性或留存说明。"))
+    indexed = {row.get("Evidence_ID", "") for row in active_rows(workbook, "14_Evidence_Index")}
+    for sheet, rows in workbook.sheets.items():
+        if sheet in {"00_Metadata", "90_Enums", "14_Evidence_Index"}:
+            continue
+        for row in active_rows(workbook, sheet):
+            evidence_id = row.get("Evidence_ID") or row.get("Related_Evidence_ID")
+            if evidence_id and evidence_id not in indexed:
+                findings.append(_row_arch("P2", "Evidence", sheet, row, "Evidence_ID", f"Evidence reference {evidence_id} is not in 14_Evidence_Index.", f"证据引用 `{evidence_id}` 不存在于 14_Evidence_Index。", "Add the evidence index row or correct the reference.", "补充证据索引行或修正引用。", evidence_id=evidence_id))
+    return findings
+
+
 def _review_observations(workbook: WorkbookData, graph: GraphModel) -> list[ReviewObservation]:
     observations: list[ReviewObservation] = []
+    observations.extend(_overview_readiness_observations(workbook, graph))
     observations.extend(_inventory_observations(workbook, graph))
     observations.extend(_network_observations(workbook))
     observations.extend(_service_inventory_observations(workbook, graph))
@@ -352,6 +761,35 @@ def _review_observations(workbook: WorkbookData, graph: GraphModel) -> list[Revi
             )
         )
     return observations
+
+
+def _overview_readiness_observations(workbook: WorkbookData, graph: GraphModel) -> list[ReviewObservation]:
+    missing = _overview_readiness_missing(workbook, graph)
+    if missing:
+        return [
+            ReviewObservation(
+                "Review",
+                "Executive Overview",
+                "workbook",
+                "",
+                "总览图就绪度：NEEDS_REVIEW。当前数据只能生成真实但信息有限的图；缺失项包括："
+                + "；".join(item["cn"] for item in missing)
+                + "。",
+                "Executive overview readiness: NEEDS_REVIEW. The current data can produce a truthful but limited diagram; missing items include: "
+                + "; ".join(item["en"] for item in missing)
+                + ".",
+            )
+        ]
+    return [
+        ReviewObservation(
+            "Info",
+            "Executive Overview",
+            "workbook",
+            "",
+            "总览图就绪度：READY。当前源表包含入口边界、核心数据流、数据资产、外部依赖、网络出口、安全控制、监控、IAM、CI/CD 和证据，可支撑会议级总览图生成。",
+            "Executive overview readiness: READY. The source workbook includes entry boundary, core dataflow, data assets, external dependencies, network egress, security controls, monitoring, IAM, CI/CD, and evidence, so it can support an executive overview diagram.",
+        )
+    ]
 
 
 def _inventory_observations(workbook: WorkbookData, graph: GraphModel) -> list[ReviewObservation]:
@@ -852,8 +1290,291 @@ def _issue_evidence_observations(workbook: WorkbookData) -> list[ReviewObservati
     return observations
 
 
+def _overview_readiness_missing(workbook: WorkbookData, graph: GraphModel) -> list[dict[str, str]]:
+    missing: list[dict[str, str]] = []
+    service_ids = {row.get("Service_ID", "") for row in active_rows(workbook, "04_Services") if row.get("Service_ID")}
+    dataflow_edges = [edge for edge in graph.edges if edge.type in DATAFLOW_EDGE_TYPES]
+    service_dataflow_edges = [edge for edge in dataflow_edges if edge.source in service_ids or edge.target in service_ids]
+    external_dependencies = [row for row in active_rows(workbook, "05_Dependencies") if row.get("Target_External_ID") or row.get("Target_Type") == "external"]
+    monitoring_rows = active_rows(workbook, "10_Monitoring")
+
+    if not _has_entry_boundary(workbook):
+        missing.append(
+            {
+                "cn": "`03_Servers.IP_External`、入口服务或 `08_Cloud_Armor` 未提供清晰入口边界",
+                "en": "`03_Servers.IP_External`, an entry service, or `08_Cloud_Armor` does not provide a clear entry boundary",
+            }
+        )
+    if not service_dataflow_edges:
+        missing.append(
+            {
+                "cn": "`05_Dependencies` 没有可用于总览图的服务上下游数据流",
+                "en": "`05_Dependencies` has no service upstream/downstream dataflow for the overview",
+            }
+        )
+    if not active_rows(workbook, "06_Data_Assets"):
+        missing.append(
+            {
+                "cn": "`06_Data_Assets` 没有数据资产记录",
+                "en": "`06_Data_Assets` has no data asset records",
+            }
+        )
+    if external_dependencies and not active_rows(workbook, "12_External_Services"):
+        missing.append(
+            {
+                "cn": "`05_Dependencies` 存在外部依赖，但 `12_External_Services` 没有外部系统记录",
+                "en": "`05_Dependencies` has external dependencies but `12_External_Services` has no external service records",
+            }
+        )
+    if external_dependencies and not _has_egress_path(workbook):
+        missing.append(
+            {
+                "cn": "存在外部依赖，但 `02_Networks.NAT_Name` / `PSC_or_Peering_Name` 未记录出站路径",
+                "en": "external dependencies exist but `02_Networks.NAT_Name` / `PSC_or_Peering_Name` does not record an egress path",
+            }
+        )
+    if not active_rows(workbook, "07_Firewalls") and not active_rows(workbook, "08_Cloud_Armor"):
+        missing.append(
+            {
+                "cn": "`07_Firewalls` 和 `08_Cloud_Armor` 都没有安全控制记录",
+                "en": "`07_Firewalls` and `08_Cloud_Armor` both have no security control records",
+            }
+        )
+    if not monitoring_rows:
+        missing.append(
+            {
+                "cn": "`10_Monitoring` 没有监控覆盖记录",
+                "en": "`10_Monitoring` has no monitoring coverage records",
+            }
+        )
+    elif not any(row.get("Coverage_Status") == "Covered" for row in monitoring_rows):
+        missing.append(
+            {
+                "cn": "`10_Monitoring.Coverage_Status` 没有任何 Covered 记录",
+                "en": "`10_Monitoring.Coverage_Status` has no Covered records",
+            }
+        )
+    if not active_rows(workbook, "09_IAM_SA"):
+        missing.append(
+            {
+                "cn": "`09_IAM_SA` 没有 IAM / Service Account 记录",
+                "en": "`09_IAM_SA` has no IAM / Service Account records",
+            }
+        )
+    if not active_rows(workbook, "11_CICD"):
+        missing.append(
+            {
+                "cn": "`11_CICD` 没有交付链路记录",
+                "en": "`11_CICD` has no delivery-chain records",
+            }
+        )
+    if not active_rows(workbook, "14_Evidence_Index"):
+        missing.append(
+            {
+                "cn": "`14_Evidence_Index` 没有证据索引记录",
+                "en": "`14_Evidence_Index` has no evidence index records",
+            }
+        )
+    return missing
+
+
+def _has_entry_boundary(workbook: WorkbookData) -> bool:
+    if active_rows(workbook, "08_Cloud_Armor"):
+        return True
+    for row in active_rows(workbook, "03_Servers"):
+        if row.get("IP_External") or row.get("Public_IP_or_LB") or row.get("LB_Name"):
+            return True
+        role_text = " ".join([row.get("Server_Role", ""), row.get("Network_Tag", ""), row.get("Hostname", "")]).lower()
+        if any(keyword in role_text for keyword in ("entry", "ingress", "nginx", "gateway", "lb", "public")):
+            return True
+    for row in active_rows(workbook, "04_Services"):
+        service_text = " ".join([row.get("Service_ID", ""), row.get("Service_Name", ""), row.get("Service_Role", ""), row.get("Description", "")]).lower()
+        if any(keyword in service_text for keyword in ("entry", "ingress", "nginx", "gateway", "lb", "public")):
+            return True
+    return False
+
+
 def _direction_summary(rows: list[dict[str, str]]) -> str:
     return _value_summary(rows, "Direction")
+
+
+def _write_architecture_json(
+    path: Path,
+    conclusion: str,
+    findings: list[ArchitectureFinding],
+    completeness_findings: list[ArchitectureFinding],
+    observations: list[ReviewObservation],
+    coverage: list[dict[str, str]],
+    dataflow_edges: list[GraphEdge],
+    graph: GraphModel,
+) -> None:
+    payload = {
+        "conclusion": conclusion,
+        "severity_counts": _severity_counts(findings),
+        "new_completeness_finding_count": len(completeness_findings),
+        "finding_count": len(findings),
+        "review_observation_count": len(observations),
+        "dataflow_edge_count": len(dataflow_edges),
+        "dropped_edge_count": len(graph.dropped_edges),
+        "coverage_matrix": coverage,
+        "findings": [finding.as_dict() for finding in sorted(findings, key=_architecture_finding_sort_key)],
+        "review_observations": [observation.__dict__ for observation in observations],
+        "dataflow_edges": [
+            {
+                "edge_id": edge.id,
+                "type": edge.type,
+                "source": edge.source,
+                "target": edge.target,
+                "status": edge.status,
+                "source_record": _source_record(edge),
+                "evidence_id": edge.evidence_id or edge.metadata.get("evidence_id", ""),
+            }
+            for edge in dataflow_edges
+        ],
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _coverage_matrix(findings: list[ArchitectureFinding], observations: list[ReviewObservation]) -> list[dict[str, str]]:
+    categories = ["Executive Overview", "Service", "Dependency", "Data Asset", "External Service", "Network", "Firewall", "IAM", "Monitoring", "CI/CD", "Evidence", "Issue", "Graph", "Inventory", "Traceability"]
+    rows: list[dict[str, str]] = []
+    for category in categories:
+        category_findings = [finding for finding in findings if finding.category == category]
+        category_observations = [observation for observation in observations if observation.category == category]
+        counts = _severity_counts(category_findings)
+        status_cn, status_en = _category_status(counts)
+        rows.append(
+            {
+                "category": category,
+                "status_cn": status_cn,
+                "status_en": status_en,
+                "P0": str(counts["P0"]),
+                "P1": str(counts["P1"]),
+                "P2": str(counts["P2"]),
+                "Info": str(counts["Info"]),
+                "summary_cn": f"发现 {len(category_findings)} 条，观察 {len(category_observations)} 条。",
+                "summary_en": f"{len(category_findings)} findings, {len(category_observations)} observations.",
+            }
+        )
+    return rows
+
+
+def _category_status(counts: dict[str, int]) -> tuple[str, str]:
+    if counts["P0"]:
+        return "BLOCKED", "BLOCKED"
+    if counts["P1"]:
+        return "NEEDS_FIX", "NEEDS_FIX"
+    if counts["P2"]:
+        return "NEEDS_REVIEW", "NEEDS_REVIEW"
+    return "PASS", "PASS"
+
+
+def _architecture_conclusion(findings: list[ArchitectureFinding], pending: list[Finding]) -> str:
+    counts = _severity_counts(findings)
+    if counts["P0"]:
+        return "BLOCKED"
+    if counts["P1"]:
+        return "NEEDS_FIX"
+    if counts["P2"] or pending:
+        return "NEEDS_REVIEW"
+    return "PASS"
+
+
+def _severity_counts(findings: list[ArchitectureFinding]) -> dict[str, int]:
+    counts = {"P0": 0, "P1": 0, "P2": 0, "P3": 0, "Info": 0}
+    for finding in findings:
+        counts[finding.severity] = counts.get(finding.severity, 0) + 1
+    return counts
+
+
+def _architecture_finding_sort_key(finding: ArchitectureFinding) -> tuple[int, str, str, str]:
+    return (_severity_order(finding.severity), finding.category, finding.sheet, finding.row_id)
+
+
+def _category_from_sheet(sheet: str) -> str:
+    return {
+        "01_Projects": "Inventory",
+        "02_Networks": "Network",
+        "03_Servers": "Service",
+        "04_Services": "Service",
+        "05_Dependencies": "Dependency",
+        "06_Data_Assets": "Data Asset",
+        "07_Firewalls": "Firewall",
+        "08_Cloud_Armor": "Firewall",
+        "09_IAM_SA": "IAM",
+        "10_Monitoring": "Monitoring",
+        "11_CICD": "CI/CD",
+        "12_External_Services": "External Service",
+        "13_Issues_Exceptions": "Issue",
+        "14_Evidence_Index": "Evidence",
+        "normalized": "Graph",
+    }.get(sheet, "Evidence")
+
+
+def _arch(
+    severity: str,
+    category: str,
+    sheet: str,
+    row_id: str,
+    field: str,
+    message_en: str,
+    message_cn: str,
+    action_en: str,
+    action_cn: str,
+    evidence_id: str = "",
+) -> ArchitectureFinding:
+    return ArchitectureFinding(severity, category, sheet, row_id, field, message_cn, message_en, action_cn, action_en, evidence_id)
+
+
+def _row_arch(
+    severity: str,
+    category: str,
+    sheet: str,
+    row: Row,
+    field: str,
+    message_en: str,
+    message_cn: str,
+    action_en: str,
+    action_cn: str,
+    evidence_id: str = "",
+) -> ArchitectureFinding:
+    return _arch(severity, category, sheet, _row_id(row), field, message_en, message_cn, action_en, action_cn, evidence_id or row.get("Evidence_ID") or row.get("Related_Evidence_ID", ""))
+
+
+def _row_id(row: Row) -> str:
+    for field in ("Record_ID", "Issue_ID", "Dependency_ID", "Service_ID", "Data_Asset_ID", "External_ID", "Firewall_ID", "IAM_Binding_ID", "Monitoring_ID", "CICD_ID", "Network_ID", "Evidence_ID"):
+        if row.get(field):
+            return row[field]
+    return ""
+
+
+def _monitored_object_ids(workbook: WorkbookData) -> set[str]:
+    return {row.get("Object_ID", "") for row in active_rows(workbook, "10_Monitoring") if row.get("Object_ID") and row.get("Coverage_Status") in {"Covered", "Partial"}}
+
+
+def _dataflow_connected_ids(graph: GraphModel) -> set[str]:
+    edges = [edge for edge in graph.edges if edge.type in DATAFLOW_EDGE_TYPES]
+    return {edge.source for edge in edges} | {edge.target for edge in edges}
+
+
+def _firewalls_by_dependency(workbook: WorkbookData) -> dict[str, list[Row]]:
+    by_dependency: dict[str, list[Row]] = {}
+    for row in active_rows(workbook, "07_Firewalls"):
+        if row.get("Related_Dependency_ID"):
+            by_dependency.setdefault(row["Related_Dependency_ID"], []).append(row)
+    return by_dependency
+
+
+def _has_egress_path(workbook: WorkbookData) -> bool:
+    return any(row.get("NAT_Name") or row.get("PSC_or_Peering_Name") for row in active_rows(workbook, "02_Networks"))
+
+
+def _issues_by_object(workbook: WorkbookData) -> dict[str, Row]:
+    issues: dict[str, Row] = {}
+    for row in active_rows(workbook, "13_Issues_Exceptions"):
+        if row.get("Affected_Object_ID"):
+            issues[row["Affected_Object_ID"]] = row
+    return issues
 
 
 def _value_summary(rows: list[dict[str, str]], field: str) -> str:

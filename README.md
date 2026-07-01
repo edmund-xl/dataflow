@@ -62,7 +62,7 @@ scripts/check_dcp.sh samples/DCP_clean_v0.1
 samples/DCP_clean_v0.1/agent_check/
 ```
 
-先阅读 `check_summary.md`。如果状态为 `NEEDS_FIX`，继续阅读 `fix_list.md`，修正源工作簿后再次执行脚本。需要从内容本身综合判断服务、依赖、数据资产、外部系统、网络、安全、监控、IAM、CI/CD 和证据问题时，阅读 `architecture_findings.md`；该报告直接分析 Excel/DCP 生成的 graph model，不依赖人工看图，并区分自动化问题和需要人工复核的审查观察项。
+先阅读 `check_summary.md`。如果状态为 `NEEDS_FIX`，继续阅读 `fix_list.md`，修正源工作簿后再次执行脚本。需要从内容本身综合判断服务、依赖、数据资产、外部系统、网络、安全、监控、IAM、CI/CD 和证据问题时，阅读 `architecture_findings.md`；该报告直接分析 Excel/DCP 生成的 graph model，不依赖人工看图，并区分总览图就绪度、自动化问题和需要人工复核的审查观察项。
 
 如需指定输出目录：
 
@@ -179,7 +179,7 @@ Schema 与模板兼容关系：
 
 | 项目 | 当前值 | 说明 |
 | --- | --- | --- |
-| Python 包版本 | `0.1.0` | 当前代码版本，见 `pyproject.toml`。 |
+| Python 包版本 | `0.1.1` | 当前代码版本，见 `pyproject.toml`。 |
 | Workbook schema | `workbook_schema.v0.1` | Agent 校验和建图使用的结构化字段契约。 |
 | Template package | `dataflow_template.v1.0` | `templates/dataflow_v1.0/` 中的通用模板资料包。 |
 
@@ -271,7 +271,7 @@ Default output path:
 samples/DCP_clean_v0.1/agent_check/
 ```
 
-Read `check_summary.md` first. If the status is `NEEDS_FIX`, read `fix_list.md`, correct the source workbook, and run the script again. To review service, dependency, data asset, external system, network, security, monitoring, IAM, CI/CD, and evidence issues from the data itself, read `architecture_findings.md`; it directly analyzes the graph model generated from the Excel/DCP source, does not depend on manually reading diagrams, and separates automated findings from human-review observations.
+Read `check_summary.md` first. If the status is `NEEDS_FIX`, read `fix_list.md`, correct the source workbook, and run the script again. To review service, dependency, data asset, external system, network, security, monitoring, IAM, CI/CD, and evidence issues from the data itself, read `architecture_findings.md`; it directly analyzes the graph model generated from the Excel/DCP source, does not depend on manually reading diagrams, and separates executive overview readiness, automated findings, and human-review observations.
 
 To specify the output directory:
 
@@ -388,7 +388,7 @@ Schema and template compatibility:
 
 | Item | Current value | Notes |
 | --- | --- | --- |
-| Python package version | `0.1.0` | Current code version in `pyproject.toml`. |
+| Python package version | `0.1.1` | Current code version in `pyproject.toml`. |
 | Workbook schema | `workbook_schema.v0.1` | Structured field contract used by validation and graph generation. |
 | Template package | `dataflow_template.v1.0` | Generic template package under `templates/dataflow_v1.0/`. |
 

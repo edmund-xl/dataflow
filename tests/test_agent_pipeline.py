@@ -14,7 +14,7 @@ import pytest
 from docx import Document
 from openpyxl import load_workbook
 
-from dataflow_agent.architecture_findings import write_architecture_findings
+from dataflow_agent.architecture_findings import build_completeness_findings, write_architecture_findings
 from dataflow_agent.constants import find_workbook
 from dataflow_agent.diagram_renderer import VIEWS, render_diagrams, render_service_drilldown
 from dataflow_agent.graph_builder import build_graph
@@ -54,6 +54,7 @@ def test_full_run_outputs_package(tmp_path: Path) -> None:
     assert (package_dir / "normalized" / "dataflow_graph.yaml").exists()
     assert (package_dir / "reports" / "validation_report.xlsx").exists()
     assert (package_dir / "reports" / "architecture_findings.md").exists()
+    assert (package_dir / "reports" / "architecture_findings.json").exists()
     assert (package_dir / "reports" / "logic_mapping_validation_report.docx").exists()
     assert (package_dir / "reports" / "issue_risk_register.xlsx").exists()
     assert (package_dir / "reports" / "acceptance_checklist.xlsx").exists()
@@ -71,6 +72,12 @@ def test_full_run_outputs_package(tmp_path: Path) -> None:
     assert "# Architecture Findings Report" in architecture_findings
     assert "真实数据流链路" in architecture_findings
     assert "nonexistent relationships are not invented" in architecture_findings
+    assert "总览图就绪度：READY" in architecture_findings
+    architecture_json = json.loads((package_dir / "reports" / "architecture_findings.json").read_text(encoding="utf-8"))
+    assert "coverage_matrix" in architecture_json
+    assert "findings" in architecture_json
+    assert architecture_json["conclusion"] == "PASS"
+    assert any(observation["category"] == "Executive Overview" for observation in architecture_json["review_observations"])
 
 
 def test_clean_sample_has_no_validation_or_risk_findings() -> None:
@@ -482,14 +489,17 @@ def test_script_check_dcp_runs_with_defaults(tmp_path: Path) -> None:
     assert (check_dir / "check_summary.md").exists()
     assert (check_dir / "fix_list.md").exists()
     assert (check_dir / "architecture_findings.md").exists()
+    assert (check_dir / "architecture_findings.json").exists()
     assert "自检状态：`PASS`" in (check_dir / "check_summary.md").read_text(encoding="utf-8")
     assert "分析结论：`PASS`" in (check_dir / "architecture_findings.md").read_text(encoding="utf-8")
+    assert "架构完整性发现：P0=0，P1=0，P2=0" in (check_dir / "check_summary.md").read_text(encoding="utf-8")
 
     custom_check = tmp_path / "agent_check"
     subprocess.run(["scripts/check_dcp.sh", "samples/DCP_clean_v0.1", "--output", str(custom_check)], cwd=ROOT, check=True, env=_script_env())
     assert (custom_check / "check_summary.md").exists()
     assert (custom_check / "fix_list.md").exists()
     assert (custom_check / "architecture_findings.md").exists()
+    assert (custom_check / "architecture_findings.json").exists()
 
 
 def test_script_build_package_runs_with_defaults(tmp_path: Path) -> None:
@@ -710,6 +720,97 @@ def test_architecture_findings_include_review_observations(tmp_path: Path) -> No
     assert "No IAM / Service Account records are present" in content
 
 
+def test_completeness_rule_matrix_detects_missing_cross_domain_information() -> None:
+    schema = load_schema()
+    workbook = normalize_workbook(read_workbook(CLEAN_SAMPLE_WORKBOOK, schema), schema)
+
+    service = next(row for row in workbook.sheets["04_Services"] if row["Service_ID"] == "svc-rpc-api")
+    service["Service_Owner"] = ""
+    service["Listen_Ports"] = ""
+
+    dependency = next(row for row in workbook.sheets["05_Dependencies"] if row["Dependency_ID"] == "dep-rpc-sequencer")
+    dependency["Auth_Method"] = ""
+    workbook.sheets["07_Firewalls"] = [row for row in workbook.sheets["07_Firewalls"] if row.get("Related_Dependency_ID") != "dep-rpc-sequencer"]
+    workbook.sheets["10_Monitoring"] = [row for row in workbook.sheets["10_Monitoring"] if row.get("Object_ID") != "dep-rpc-sequencer"]
+
+    asset = next(row for row in workbook.sheets["06_Data_Assets"] if row["Data_Asset_ID"] == "data-cloudsql-state")
+    asset["Backup_Policy"] = ""
+    asset["Used_By_Service_ID"] = ""
+
+    external = next(row for row in workbook.sheets["12_External_Services"] if row["External_ID"] == "ext-eigenda")
+    external["Auth_Method"] = ""
+    external["Purpose"] = ""
+    external["Data_Classification"] = ""
+
+    firewall = workbook.sheets["07_Firewalls"][0]
+    firewall["Firewall_ID"] = "fw-wide-no-exception"
+    firewall["Direction"] = "ingress"
+    firewall["Source_Allowed"] = "0.0.0.0/0"
+    firewall["Confirmation_Status"] = "Confirmed"
+
+    iam = workbook.sheets["09_IAM_SA"][0]
+    iam["Role"] = "roles/owner"
+    iam["Is_High_Privilege"] = "Yes"
+    iam["Justification"] = ""
+
+    cicd = workbook.sheets["11_CICD"][0]
+    cicd["Approval_Required"] = "No"
+    cicd["Deployment_Account"] = ""
+    cicd["Target_Service_ID"] = ""
+    cicd["Target_Instance_ID"] = ""
+
+    evidence = workbook.sheets["14_Evidence_Index"][0]
+    evidence["Integrity_Note"] = ""
+
+    graph = build_graph(workbook)
+    findings = build_completeness_findings(workbook, graph)
+    messages = "\n".join(f"{finding.severity} {finding.category} {finding.message_en}" for finding in findings)
+
+    assert "Critical service svc-rpc-api has no Service_Owner" in messages
+    assert "Critical service svc-rpc-api has no Listen_Ports" in messages
+    assert "Critical dependency dep-rpc-sequencer has no related firewall rule" in messages
+    assert "Dependency dep-rpc-sequencer has no Auth_Method" in messages
+    assert "Critical dependency dep-rpc-sequencer has no direct monitoring coverage" in messages
+    assert "Data asset data-cloudsql-state has no Backup_Policy" in messages
+    assert "Data asset data-cloudsql-state has no Used_By_Service_ID" in messages
+    assert "External service ext-eigenda has no Auth_Method" in messages
+    assert "External service ext-eigenda has no Purpose" in messages
+    assert "External service ext-eigenda has no Data_Classification" in messages
+    assert "allows ingress from 0.0.0.0/0 without Accepted_Exception status" in messages
+    assert "High privilege IAM binding" in messages
+    assert "does not show required approval" in messages
+    assert "has no Deployment_Account" in messages
+    assert "has no deployment target" in messages
+    assert "has no Integrity_Note" in messages
+
+
+def test_overview_readiness_detects_missing_executive_summary_inputs() -> None:
+    schema = load_schema()
+    workbook = normalize_workbook(read_workbook(CLEAN_SAMPLE_WORKBOOK, schema), schema)
+    workbook.sheets["08_Cloud_Armor"] = []
+    workbook.sheets["09_IAM_SA"] = []
+    for row in workbook.sheets["03_Servers"]:
+        row["IP_External"] = ""
+        row["Server_Role"] = "internal node"
+        row["Network_Tag"] = "internal"
+    for row in workbook.sheets["04_Services"]:
+        row["Service_Name"] = row.get("Service_ID", "")
+        row["Service_Role"] = "internal service"
+        row["Description"] = ""
+    for row in workbook.sheets["10_Monitoring"]:
+        row["Coverage_Status"] = "Partial"
+
+    graph = build_graph(workbook)
+    findings = build_completeness_findings(workbook, graph)
+    overview_findings = [finding for finding in findings if finding.category == "Executive Overview"]
+
+    assert len(overview_findings) == 1
+    assert overview_findings[0].severity == "P2"
+    assert "Executive overview is not ready" in overview_findings[0].message_en
+    assert "09_IAM_SA" in overview_findings[0].message_cn
+    assert "10_Monitoring.Coverage_Status" in overview_findings[0].message_cn
+
+
 def test_devops_docs_and_deterministic_agent_boundary_are_documented() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     collection_guide = (ROOT / "docs" / "devops_collection_filling_guide.md").read_text(encoding="utf-8")
@@ -757,8 +858,10 @@ def test_changelog_tracks_current_and_historical_changes() -> None:
     assert "# English Version" in changelog
     assert changelog.index("# 中文版本") < changelog.index("# English Version")
     assert "## Unreleased" in changelog
+    assert "## 0.1.1 - 2026-07-01" in changelog
     assert "## 0.1.0 - 2026-06-24" in changelog
-    assert 'version = "0.1.0"' in pyproject
+    assert 'version = "0.1.1"' in pyproject
+    assert "0.1.1" in changelog
     assert "0.1.0" in changelog
     assert "历史开发记录 - 2026-06-23 至 2026-06-24" in changelog
     assert "Historical Development Record - 2026-06-23 To 2026-06-24" in changelog
@@ -773,6 +876,7 @@ def test_changelog_tracks_current_and_historical_changes() -> None:
         "doctor.sh",
         "setup_env.sh",
         "DCP_clean_v0.1",
+        "executive overview readiness",
         "9dadfab",
         "f064829",
     ]:

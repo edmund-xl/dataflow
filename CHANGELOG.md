@@ -2,9 +2,13 @@
 
 # 版本变更记录
 
-本文记录 Dataflow Agent 的用户可见变更。当前仓库尚未建立历史 tag，因此历史开发内容按日期和提交批次归档，不倒填虚构版本号。
+本文记录 Dataflow Agent 的用户可见变更。历史开发内容按日期和提交批次归档，不倒填虚构版本号。
 
 ## Unreleased
+
+暂无未发布变更。
+
+## 0.1.1 - 2026-07-01
 
 ### Added
 
@@ -28,7 +32,8 @@
 - 总览图同步改为主数据流编号视图，安全与监控图改为逐行关系视图，避免控制类关系大量交叉堆叠。
 - 主数据流编号渲染改为先画线、再画节点、最后画编号，并将编号锚定到水平线段上，避免数字被线条覆盖。
 - 安全与监控图改为与其他普通分层图一致的浅色 C4 配色；编号拓扑仅保留在总览图和服务依赖图。
-- 新增 `architecture_findings.md` 架构问题分析报告，直接基于 Excel/DCP 生成的 graph model、校验结果、风险结果和可审查事实，综合列出服务、依赖、数据资产、外部系统、网络、CI/CD、安全、监控、IAM、证据、真实数据流链路、问题分组、审查观察项和源表修复位置。
+- 新增 completeness/risk rule matrix，并扩展 `architecture_findings.md` / `architecture_findings.json`，直接基于 Excel/DCP 生成的 graph model、校验结果、风险结果和可审查事实，综合列出服务、依赖、数据资产、外部系统、网络、CI/CD、安全、监控、IAM、证据、覆盖矩阵、缺失与风险清单、真实数据流链路、问题分组、审查观察项和源表修复位置。
+- 新增总览图就绪度判断，明确当前数据是否足以支撑会议级 executive overview；信息不足时列出缺失的入口边界、核心数据流、数据资产、外部依赖、网络出口、安全控制、监控、IAM、CI/CD 或证据来源。
 
 ### Fixed
 
@@ -119,9 +124,13 @@
 
 # Changelog
 
-This file records user-visible changes to Dataflow Agent. The repository does not yet have historical tags, so historical development work is archived by date and commit batch without inventing release versions.
+This file records user-visible changes to Dataflow Agent. Historical development work is archived by date and commit batch without inventing release versions.
 
 ## Unreleased
+
+No unreleased changes.
+
+## 0.1.1 - 2026-07-01
 
 ### Added
 
@@ -145,7 +154,8 @@ This file records user-visible changes to Dataflow Agent. The repository does no
 - Changed the overview layer to the same numbered main-dataflow view and changed the security / monitoring layer to a row-based relationship view to avoid dense crossing control relationships.
 - Changed numbered main-dataflow rendering to draw lines first, nodes second, and edge-number badges last, with badges anchored to horizontal edge segments so numbers are not covered by lines.
 - Changed the security and monitoring layer to the same light C4 palette used by the other regular layered diagrams; numbered topology is kept only for the overview and service dependency diagrams.
-- Added the `architecture_findings.md` architecture findings report, which summarizes services, dependencies, data assets, external systems, network, CI/CD, security, monitoring, IAM, evidence, real dataflow paths, finding groups, review observations, and source-sheet fix locations directly from the graph model, validation findings, risk findings, and reviewable facts generated from the Excel/DCP source.
+- Added the completeness/risk rule matrix and expanded `architecture_findings.md` / `architecture_findings.json`, summarizing services, dependencies, data assets, external systems, network, CI/CD, security, monitoring, IAM, evidence, the coverage matrix, missing information and risk list, real dataflow paths, finding groups, review observations, and source-sheet fix locations directly from the graph model, validation findings, risk findings, and reviewable facts generated from the Excel/DCP source.
+- Added executive overview readiness checks to state whether the collected data is sufficient for a meeting-level executive overview; when it is not, the report lists missing entry boundary, core dataflow, data assets, external dependencies, network egress, security controls, monitoring, IAM, CI/CD, or evidence inputs.
 
 ### Fixed
 
