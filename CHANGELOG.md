@@ -24,6 +24,7 @@
 - `metadata.json` 增加 `schema_version` 和 `template_version`，README 增加 schema / template 兼容关系。
 - Overview renderer 拆分为独立模块，降低后续图形优化的维护风险。
 - 分层图新增 draw.io `.drawio` 可编辑源图和 GraphML `.graphml` 工具交换文件，便于拖拽调整和导入专业图形工具。
+- 服务依赖图改为主数据流编号视图：图上线条只显示编号，右侧 `Edge ledger` 展示来源记录、关系类型、端口和源/目标对象，降低线条标签重叠。
 
 ### Fixed
 
@@ -136,6 +137,7 @@ This file records user-visible changes to Dataflow Agent. The repository does no
 - Added `schema_version` and `template_version` to `metadata.json`; README now documents schema / template compatibility.
 - Split the overview renderer into its own module to reduce diagram-renderer maintenance risk.
 - Added draw.io `.drawio` editable source files and GraphML `.graphml` exchange files for layered diagrams, enabling drag editing and import into professional diagram tools.
+- Changed the service dependency layer to a numbered main-dataflow view: lines show only edge numbers, while the right-side `Edge ledger` records source rows, relationship types, ports, and source/target objects to reduce label overlap.
 
 ### Fixed
 

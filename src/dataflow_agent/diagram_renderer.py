@@ -100,6 +100,10 @@ TYPE_STYLES = {
 }
 
 CONTROL_EDGES = {"allowed_by", "protected_by", "uses_sa", "has_binding", "monitored_by", "deployed_by"}
+DATAFLOW_EDGES = {"calls", "calls_external", "reads_from", "writes_to", "depends_on"}
+SERVICE_DEP_NODE_WIDTH = 310
+SERVICE_DEP_NODE_HEIGHT = 92
+SERVICE_DEP_LEDGER_WIDTH = 560
 LAYER_ORDER = {
     "project": 0,
     "network": 1,
@@ -144,10 +148,17 @@ def render_diagrams(graph: GraphModel, diagrams_dir: Path) -> list[Path]:
             outputs.extend(render_overview_outputs(graph, diagrams_dir, view))
             continue
         nodes, edges = _select_view(graph, view)
-        positions = _layout(nodes)
-        outputs.append(_write_svg(diagrams_dir / f"{view.filename}.svg", view, nodes, edges, positions))
-        outputs.append(_write_png(diagrams_dir / f"{view.filename}.png", view, nodes, edges, positions))
-        outputs.append(_write_pdf(diagrams_dir / f"{view.filename}.pdf", view, nodes, edges, positions))
+        if view.filename == "03_service_dependency_layer":
+            nodes, edges = _select_service_dependency_main_flow(graph)
+            positions = _service_dependency_layout(nodes, edges)
+            outputs.append(_write_service_dependency_svg(diagrams_dir / f"{view.filename}.svg", view, nodes, edges, positions))
+            outputs.append(_write_service_dependency_png(diagrams_dir / f"{view.filename}.png", view, nodes, edges, positions))
+            outputs.append(_write_service_dependency_pdf(diagrams_dir / f"{view.filename}.pdf", view, nodes, edges, positions))
+        else:
+            positions = _layout(nodes)
+            outputs.append(_write_svg(diagrams_dir / f"{view.filename}.svg", view, nodes, edges, positions))
+            outputs.append(_write_png(diagrams_dir / f"{view.filename}.png", view, nodes, edges, positions))
+            outputs.append(_write_pdf(diagrams_dir / f"{view.filename}.pdf", view, nodes, edges, positions))
         outputs.append(_write_mermaid(diagrams_dir / f"{view.filename}.mmd", view, nodes, edges))
         outputs.extend(
             write_editable_outputs(
@@ -156,8 +167,8 @@ def render_diagrams(graph: GraphModel, diagrams_dir: Path) -> list[Path]:
                 nodes,
                 edges,
                 positions,
-                node_width=NODE_WIDTH,
-                node_height=NODE_HEIGHT,
+                node_width=SERVICE_DEP_NODE_WIDTH if view.filename == "03_service_dependency_layer" else NODE_WIDTH,
+                node_height=SERVICE_DEP_NODE_HEIGHT if view.filename == "03_service_dependency_layer" else NODE_HEIGHT,
             )
         )
     return outputs
@@ -246,6 +257,21 @@ def _denoise_overview(nodes: list[GraphNode], edges: list[GraphEdge]) -> tuple[l
     return filtered_nodes or nodes, filtered_edges or edges
 
 
+def _select_service_dependency_main_flow(graph: GraphModel) -> tuple[list[GraphNode], list[GraphEdge]]:
+    best: dict[tuple[str, str, str], GraphEdge] = {}
+    for edge in graph.edges:
+        if edge.type not in DATAFLOW_EDGES:
+            continue
+        key = (edge.type, edge.source, edge.target)
+        current = best.get(key)
+        if current is None or _edge_record_id(edge) < _edge_record_id(current):
+            best[key] = edge
+    edges = sorted(best.values(), key=lambda edge: (_edge_record_id(edge), edge.source, edge.target, edge.id))
+    node_ids = {edge.source for edge in edges}.union(edge.target for edge in edges)
+    nodes = [node for node in graph.nodes.values() if node.id in node_ids]
+    return nodes, edges
+
+
 def _select_service_drilldown(graph: GraphModel, service_id: str, depth: int, direction: str, risk_focus: bool) -> tuple[list[GraphNode], list[GraphEdge]]:
     node_ids = {service_id}
     selected_edges: list[GraphEdge] = []
@@ -320,6 +346,260 @@ def _size(positions: dict[str, tuple[int, int]]) -> tuple[int, int]:
     width = max(x for x, _ in positions.values()) + NODE_WIDTH + RIGHT_MARGIN
     height = max(y for _, y in positions.values()) + NODE_HEIGHT + BOTTOM_MARGIN
     return max(width, MIN_WIDTH), max(height, MIN_HEIGHT)
+
+
+def _service_dependency_layout(nodes: list[GraphNode], edges: list[GraphEdge]) -> dict[str, tuple[int, int]]:
+    node_by_id = {node.id: node for node in nodes}
+    incoming: dict[str, list[GraphEdge]] = {node.id: [] for node in nodes}
+    outgoing: dict[str, list[GraphEdge]] = {node.id: [] for node in nodes}
+    for edge in edges:
+        incoming.setdefault(edge.target, []).append(edge)
+        outgoing.setdefault(edge.source, []).append(edge)
+    levels: dict[str, int] = {}
+    frontier = sorted([node.id for node in nodes if not incoming.get(node.id)], key=lambda item: _service_dep_node_sort(node_by_id[item]))
+    if not frontier and nodes:
+        frontier = [sorted(nodes, key=_service_dep_node_sort)[0].id]
+    for node_id in frontier:
+        levels[node_id] = 0
+    queue = list(frontier)
+    while queue:
+        node_id = queue.pop(0)
+        for edge in sorted(outgoing.get(node_id, []), key=lambda item: (_edge_record_id(item), item.target)):
+            next_level = levels[node_id] + 1
+            if levels.get(edge.target, -1) < next_level:
+                levels[edge.target] = next_level
+                queue.append(edge.target)
+    for node in nodes:
+        levels.setdefault(node.id, _node_order(node))
+
+    columns: dict[int, list[GraphNode]] = {}
+    for node in nodes:
+        columns.setdefault(levels[node.id], []).append(node)
+    for level, items in columns.items():
+        items.sort(key=lambda node: _service_dep_layout_sort(node, incoming, outgoing))
+    positions: dict[str, tuple[int, int]] = {}
+    x_step = SERVICE_DEP_NODE_WIDTH + 170
+    y_step = SERVICE_DEP_NODE_HEIGHT + 96
+    for col_idx, level in enumerate(sorted(columns)):
+        col = columns[level]
+        for row_idx, node in enumerate(col):
+            positions[node.id] = (LEFT_MARGIN + col_idx * x_step, HEADER_HEIGHT + 92 + row_idx * y_step)
+    return positions
+
+
+def _service_dep_node_sort(node: GraphNode) -> tuple[int, str, str]:
+    return _node_order(node), node.label.lower(), node.id
+
+
+def _service_dep_layout_sort(node: GraphNode, incoming: dict[str, list[GraphEdge]], outgoing: dict[str, list[GraphEdge]]) -> tuple[str, int, str, str]:
+    related = incoming.get(node.id) or outgoing.get(node.id) or []
+    first_record = min((_edge_record_id(edge) or edge.id for edge in related), default="")
+    return first_record, _node_order(node), node.label.lower(), node.id
+
+
+def _service_dependency_size(positions: dict[str, tuple[int, int]], edges: list[GraphEdge]) -> tuple[int, int, int]:
+    if not positions:
+        return MIN_WIDTH + SERVICE_DEP_LEDGER_WIDTH, MIN_HEIGHT, MIN_WIDTH
+    graph_width = max(x for x, _ in positions.values()) + SERVICE_DEP_NODE_WIDTH + 72
+    ledger_x = graph_width + 40
+    width = ledger_x + SERVICE_DEP_LEDGER_WIDTH + 50
+    graph_height = max(y for _, y in positions.values()) + SERVICE_DEP_NODE_HEIGHT + 100
+    ledger_height = HEADER_HEIGHT + 132 + len(edges) * 74
+    height = max(MIN_HEIGHT, graph_height, ledger_height)
+    return width, height, ledger_x
+
+
+def _write_service_dependency_svg(path: Path, view: View, nodes: list[GraphNode], edges: list[GraphEdge], positions: dict[str, tuple[int, int]]) -> Path:
+    width, height, ledger_x = _service_dependency_size(positions, edges)
+    lines = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-label="{xml_escape(view.title)} main dataflow with edge ledger">',
+        "<defs>",
+        '<marker id="svcArrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#475569"/></marker>',
+        '<filter id="svcShadow"><feDropShadow dx="3" dy="5" stdDeviation="0" flood-color="#CBD5E1" flood-opacity="0.9"/></filter>',
+        "</defs>",
+        '<rect width="100%" height="100%" fill="#F5F7FB"/>',
+        f'<text x="60" y="48" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" fill="#111827">{xml_escape(view.title)}</text>',
+        '<text x="60" y="82" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#5B6573">Main dataflow view with numbered edges and source-record ledger</text>',
+        f'<text x="60" y="104" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#5B6573">{len(nodes)} nodes | {len(edges)} real dataflow edges | no inferred relationships</text>',
+        f'<rect x="40" y="{HEADER_HEIGHT}" width="{ledger_x - 58}" height="{height - HEADER_HEIGHT - 42}" rx="18" fill="#FFFFFF" stroke="#CBD5E1"/>',
+        f'<rect x="{ledger_x}" y="{HEADER_HEIGHT}" width="{SERVICE_DEP_LEDGER_WIDTH}" height="{height - HEADER_HEIGHT - 42}" rx="18" fill="#FFFFFF" stroke="#CBD5E1"/>',
+    ]
+    _append_service_dependency_svg_edges(lines, edges, positions)
+    for node in nodes:
+        x, y = positions.get(node.id, (LEFT_MARGIN, HEADER_HEIGHT + 92))
+        _append_service_dependency_svg_node(lines, node, x, y)
+    _append_service_dependency_svg_ledger(lines, edges, ledger_x)
+    lines.append("</svg>")
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return path
+
+
+def _append_service_dependency_svg_edges(lines: list[str], edges: list[GraphEdge], positions: dict[str, tuple[int, int]]) -> None:
+    for idx, edge in enumerate(edges, 1):
+        if edge.source not in positions or edge.target not in positions:
+            continue
+        points = _service_dependency_edge_points(edge, positions, idx)
+        color = _service_dependency_edge_color(edge)
+        point_text = " ".join(f"{x:.1f},{y:.1f}" for x, y in points)
+        lines.append(f'<polyline points="{point_text}" fill="none" stroke="{color}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#svcArrow)" data-edge-id="{xml_escape(edge.id)}" data-edge-number="{idx}" data-edge-type="{xml_escape(edge.type)}" data-source="{xml_escape(edge.source)}" data-target="{xml_escape(edge.target)}"><title>{xml_escape(_service_dependency_edge_title(edge))}</title></polyline>')
+        cx, cy = _service_dependency_badge_position(points, idx)
+        lines.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="13" fill="{color}" stroke="#FFFFFF" stroke-width="2"/>')
+        lines.append(f'<text x="{cx:.1f}" y="{cy + 4:.1f}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">{idx}</text>')
+
+
+def _append_service_dependency_svg_node(lines: list[str], node: GraphNode, x: int, y: int) -> None:
+    fill, stroke = _service_dependency_node_colors(node)
+    lines.append(f'<g filter="url(#svcShadow)" data-node-id="{xml_escape(node.id)}" role="img" aria-label="{xml_escape(_node_accessible_label(node))}"><title>{xml_escape(node.id)} | {xml_escape(node.type)}</title>')
+    lines.append(f'<rect x="{x}" y="{y}" width="{SERVICE_DEP_NODE_WIDTH}" height="{SERVICE_DEP_NODE_HEIGHT}" rx="10" fill="{fill}" stroke="{stroke}" stroke-width="2"/>')
+    lines.append(f'<rect x="{x}" y="{y}" width="8" height="{SERVICE_DEP_NODE_HEIGHT}" rx="4" fill="{stroke}"/>')
+    lines.append(f'<text x="{x + 20}" y="{y + 34}" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" fill="#111827">{xml_escape(_clip(node.label, 31))}</text>')
+    lines.append(f'<text x="{x + 20}" y="{y + 62}" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#5B6573">{xml_escape(node.type)}</text>')
+    lines.append("</g>")
+
+
+def _append_service_dependency_svg_ledger(lines: list[str], edges: list[GraphEdge], x: int) -> None:
+    lines.append(f'<text x="{x + 30}" y="{HEADER_HEIGHT + 42}" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#111827">Edge ledger</text>')
+    lines.append(f'<text x="{x + 30}" y="{HEADER_HEIGHT + 68}" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#5B6573">Line numbers map to source workbook records.</text>')
+    y = HEADER_HEIGHT + 108
+    for idx, edge in enumerate(edges, 1):
+        color = _service_dependency_edge_color(edge)
+        label = _service_dependency_ledger_label(edge)
+        lines.append(f'<g data-ledger-edge-id="{xml_escape(edge.id)}">')
+        lines.append(f'<circle cx="{x + 42}" cy="{y}" r="14" fill="{color}"/>')
+        lines.append(f'<text x="{x + 42}" y="{y + 4}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">{idx}</text>')
+        lines.append(f'<text x="{x + 68}" y="{y - 4}" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="#111827">{xml_escape(_clip(label, 58))}</text>')
+        lines.append(f'<text x="{x + 68}" y="{y + 18}" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#5B6573">{xml_escape(_clip(_service_dependency_flow_label(edge), 72))}</text>')
+        lines.append("</g>")
+        y += 74
+
+
+def _write_service_dependency_png(path: Path, view: View, nodes: list[GraphNode], edges: list[GraphEdge], positions: dict[str, tuple[int, int]]) -> Path:
+    width, height, ledger_x = _service_dependency_size(positions, edges)
+    image = Image.new("RGB", (width, height), "#F5F7FB")
+    draw = ImageDraw.Draw(image)
+    title_font = _font(30, bold=True)
+    note_font = _font(14)
+    small_font = _font(12)
+    node_font = _font(17, bold=True)
+    node_meta_font = _font(12)
+    ledger_title_font = _font(18, bold=True)
+    ledger_font = _font(14, bold=True)
+    draw.text((60, 25), view.title, fill="#111827", font=title_font)
+    draw.text((60, 68), "Main dataflow view with numbered edges and source-record ledger", fill="#5B6573", font=note_font)
+    draw.text((60, 94), f"{len(nodes)} nodes | {len(edges)} real dataflow edges | no inferred relationships", fill="#5B6573", font=small_font)
+    draw.rounded_rectangle((40, HEADER_HEIGHT, ledger_x - 18, height - 42), radius=18, fill="#FFFFFF", outline="#CBD5E1")
+    draw.rounded_rectangle((ledger_x, HEADER_HEIGHT, ledger_x + SERVICE_DEP_LEDGER_WIDTH, height - 42), radius=18, fill="#FFFFFF", outline="#CBD5E1")
+    for idx, edge in enumerate(edges, 1):
+        if edge.source not in positions or edge.target not in positions:
+            continue
+        points = _service_dependency_edge_points(edge, positions, idx)
+        color = _service_dependency_edge_color(edge)
+        _draw_polyline(draw, points, color, width=4, dashed=False)
+        _draw_arrowhead(draw, points[-2], points[-1], color)
+        cx, cy = _service_dependency_badge_position(points, idx)
+        draw.ellipse((cx - 13, cy - 13, cx + 13, cy + 13), fill=color, outline="#FFFFFF", width=2)
+        number = str(idx)
+        draw.text((cx - _text_width(draw, number, small_font) / 2, cy - 7), number, fill="#FFFFFF", font=small_font)
+    for node in nodes:
+        x, y = positions.get(node.id, (LEFT_MARGIN, HEADER_HEIGHT + 92))
+        fill, stroke = _service_dependency_node_colors(node)
+        draw.rounded_rectangle((x + 3, y + 5, x + SERVICE_DEP_NODE_WIDTH + 3, y + SERVICE_DEP_NODE_HEIGHT + 5), radius=10, fill="#CBD5E1")
+        draw.rounded_rectangle((x, y, x + SERVICE_DEP_NODE_WIDTH, y + SERVICE_DEP_NODE_HEIGHT), radius=10, fill=fill, outline=stroke, width=2)
+        draw.rounded_rectangle((x, y, x + 8, y + SERVICE_DEP_NODE_HEIGHT), radius=4, fill=stroke)
+        draw.text((x + 20, y + 20), _clip(node.label, 31), fill="#111827", font=node_font)
+        draw.text((x + 20, y + 54), node.type, fill="#5B6573", font=node_meta_font)
+    draw.text((ledger_x + 30, HEADER_HEIGHT + 25), "Edge ledger", fill="#111827", font=ledger_title_font)
+    draw.text((ledger_x + 30, HEADER_HEIGHT + 56), "Line numbers map to source workbook records.", fill="#5B6573", font=small_font)
+    y = HEADER_HEIGHT + 94
+    for idx, edge in enumerate(edges, 1):
+        color = _service_dependency_edge_color(edge)
+        draw.ellipse((ledger_x + 28, y - 14, ledger_x + 56, y + 14), fill=color)
+        number = str(idx)
+        draw.text((ledger_x + 42 - _text_width(draw, number, small_font) / 2, y - 7), number, fill="#FFFFFF", font=small_font)
+        draw.text((ledger_x + 68, y - 12), _clip(_service_dependency_ledger_label(edge), 58), fill="#111827", font=ledger_font)
+        draw.text((ledger_x + 68, y + 15), _clip(_service_dependency_flow_label(edge), 72), fill="#5B6573", font=_font(11))
+        y += 74
+    image.save(path)
+    return path
+
+
+def _write_service_dependency_pdf(path: Path, view: View, nodes: list[GraphNode], edges: list[GraphEdge], positions: dict[str, tuple[int, int]]) -> Path:
+    png_path = path.with_suffix(".pdf.png")
+    _write_service_dependency_png(png_path, view, nodes, edges, positions)
+    image = Image.open(png_path)
+    width, height = image.size
+    c = canvas.Canvas(str(path), pagesize=(width, height))
+    c.drawImage(str(png_path), 0, 0, width=width, height=height)
+    c.save()
+    png_path.unlink(missing_ok=True)
+    return path
+
+
+def _service_dependency_edge_points(edge: GraphEdge, positions: dict[str, tuple[int, int]], index: int) -> list[tuple[float, float]]:
+    source = positions[edge.source]
+    target = positions[edge.target]
+    sx = source[0] + SERVICE_DEP_NODE_WIDTH
+    sy = source[1] + SERVICE_DEP_NODE_HEIGHT / 2
+    tx = target[0]
+    ty = target[1] + SERVICE_DEP_NODE_HEIGHT / 2
+    if sx <= tx:
+        if abs(sy - ty) < 12:
+            return [(sx, sy), (tx, ty)]
+        lane_offset = ((index % 5) - 2) * 18
+        mid_x = (sx + tx) / 2 + lane_offset
+        return [(sx, sy), (mid_x, sy), (mid_x, ty), (tx, ty)]
+    gutter = max(sx, tx + SERVICE_DEP_NODE_WIDTH) + 72 + (index % 4) * 22
+    return [(sx, sy), (gutter, sy), (gutter, ty), (tx, ty)]
+
+
+def _service_dependency_badge_position(points: list[tuple[float, float]], index: int) -> tuple[float, float]:
+    if len(points) < 2:
+        return points[0] if points else (0.0, 0.0)
+    start, end = max(zip(points, points[1:]), key=lambda pair: (pair[1][0] - pair[0][0]) ** 2 + (pair[1][1] - pair[0][1]) ** 2)
+    x = (start[0] + end[0]) / 2
+    y = (start[1] + end[1]) / 2
+    offset = ((index % 3) - 1) * 20
+    if abs(end[0] - start[0]) < abs(end[1] - start[1]):
+        x += offset
+    else:
+        y += offset * 0.45
+    return x, y
+
+
+def _service_dependency_node_colors(node: GraphNode) -> tuple[str, str]:
+    if node.type == "service":
+        return "#DBEAFE", "#2563EB"
+    if node.type == "data_asset":
+        return "#F3E8FF", "#7C3AED"
+    if node.type == "external_service":
+        return "#F8FAFC", "#64748B"
+    return "#FFFFFF", "#64748B"
+
+
+def _service_dependency_edge_color(edge: GraphEdge) -> str:
+    if edge.type in {"reads_from", "writes_to"}:
+        return "#7C3AED"
+    if edge.type == "calls_external":
+        return "#64748B"
+    if edge.type == "depends_on":
+        return "#D97706"
+    return "#2563EB"
+
+
+def _edge_record_id(edge: GraphEdge) -> str:
+    return str(edge.metadata.get("record_id", "")) if isinstance(edge.metadata, dict) else ""
+
+
+def _service_dependency_ledger_label(edge: GraphEdge) -> str:
+    return f"{_edge_record_id(edge) or edge.id} | {edge.type.replace('_', ' ')} | {edge.label or ''}"
+
+
+def _service_dependency_flow_label(edge: GraphEdge) -> str:
+    return f"{edge.source} -> {edge.target}"
+
+
+def _service_dependency_edge_title(edge: GraphEdge) -> str:
+    return f"{_service_dependency_ledger_label(edge)} | {_service_dependency_flow_label(edge)}"
 
 
 def _write_svg(path: Path, view: View, nodes: list[GraphNode], edges: list[GraphEdge], positions: dict[str, tuple[int, int]]) -> Path:

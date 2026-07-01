@@ -194,6 +194,7 @@ def test_all_diagram_views_render_nonempty_files(tmp_path: Path) -> None:
         assert path.stat().st_size > 100
 
     overview_svg = (tmp_path / "00_overview.svg").read_text(encoding="utf-8")
+    service_svg = (tmp_path / "03_service_dependency_layer.svg").read_text(encoding="utf-8")
     security_svg = (tmp_path / "05_security_monitoring_layer.svg").read_text(encoding="utf-8")
     overview_drawio = ElementTree.parse(tmp_path / "00_overview.drawio")
     overview_graphml = ElementTree.parse(tmp_path / "00_overview.graphml")
@@ -202,6 +203,11 @@ def test_all_diagram_views_render_nonempty_files(tmp_path: Path) -> None:
     assert "Legend" in overview_svg
     assert "Graph edge ledger" in overview_svg
     assert "Subnet" not in overview_svg
+    assert "Edge ledger" in service_svg
+    assert 'data-edge-number="' in service_svg
+    assert 'data-edge-type="allowed_by"' not in service_svg
+    assert 'data-edge-type="uses_runtime"' not in service_svg
+    assert "Firewall Rule" not in service_svg
     assert "Security Review Focus" in security_svg
     assert "#101827" in security_svg
     drawio_edges = [cell for cell in overview_drawio.findall(".//mxCell") if cell.attrib.get("edge") == "1"]
