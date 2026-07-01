@@ -8,7 +8,6 @@ from PIL import Image, ImageDraw, ImageFont
 from reportlab.lib.pagesizes import landscape, letter
 from reportlab.pdfgen import canvas
 
-from .editable_exporter import write_editable_outputs
 from .models import GraphEdge, GraphModel, GraphNode
 from .util import safe_id, xml_escape
 
@@ -34,7 +33,7 @@ VIEWS = [
     View("00_overview", "Dataflow Project Data Flow Overview", {"gcp_project", "lb", "entry_point", "service", "server", "runtime", "data_asset", "external_service", "firewall_rule", "cloud_armor_policy", "monitoring_control"}, {"contains", "runs_on", "runs_on_runtime", "uses_runtime", "calls", "calls_external", "reads_from", "writes_to", "depends_on", "allowed_by", "protected_by", "monitored_by"}),
     View("01_network_layer", "Network Layer", {"gcp_project", "network", "vpc", "subnet", "nat", "lb", "psc_peering", "firewall_rule", "cloud_armor_policy", "entry_point"}, {"contains", "allowed_by", "protected_by"}),
     View("02_compute_service_layer", "Compute And Service Layer", {"server", "runtime", "service", "port"}, {"runs_on", "runs_on_runtime", "uses_runtime", "listens_on"}),
-    View("03_service_dependency_layer", "Service Dependency Layer", {"service", "external_service", "data_asset", "dependency_ref"}, {"calls", "calls_external", "reads_from", "writes_to", "depends_on", "uses_runtime", "allowed_by"}),
+    View("03_service_dependency_layer", "Service Dependency Layer", {"service", "runtime", "external_service", "data_asset", "dependency_ref", "firewall_rule"}, {"calls", "calls_external", "reads_from", "writes_to", "depends_on", "uses_runtime", "allowed_by"}),
     View("04_data_storage_layer", "Data And Storage Layer", {"service", "data_asset"}, {"reads_from", "writes_to"}),
     View("05_security_monitoring_layer", "Security And Monitoring Layer", {"service", "server", "firewall_rule", "cloud_armor_policy", "service_account", "iam_binding", "monitoring_control", "entry_point"}, {"allowed_by", "protected_by", "uses_sa", "has_binding", "monitored_by"}),
     View("06_cicd_delivery_layer", "CI/CD Delivery Layer", {"cicd_component", "service", "server", "runtime"}, {"deployed_by", "runs_on", "runs_on_runtime"}),
@@ -99,7 +98,6 @@ TYPE_STYLES = {
     "cicd_component": NodeStyle("#FFEDD5", "#FDBA74", "#EA580C", "Delivery"),
 }
 
-DATAFLOW_EDGES = {"calls", "calls_external", "reads_from", "writes_to", "depends_on"}
 CONTROL_EDGES = {"allowed_by", "protected_by", "uses_sa", "has_binding", "monitored_by", "deployed_by"}
 LAYER_ORDER = {
     "project": 0,
@@ -145,27 +143,11 @@ def render_diagrams(graph: GraphModel, diagrams_dir: Path) -> list[Path]:
             outputs.extend(render_overview_outputs(graph, diagrams_dir, view))
             continue
         nodes, edges = _select_view(graph, view)
-        positions = _layout(nodes, column_gap=_view_column_gap(view))
-        if view.filename == "05_security_monitoring_layer":
-            outputs.append(_write_security_matrix_svg(diagrams_dir / f"{view.filename}.svg", view, graph, edges))
-            outputs.append(_write_security_matrix_png(diagrams_dir / f"{view.filename}.png", view, graph, edges))
-            outputs.append(_write_security_matrix_pdf(diagrams_dir / f"{view.filename}.pdf", view, graph, edges))
-        else:
-            outputs.append(_write_svg(diagrams_dir / f"{view.filename}.svg", view, nodes, edges, positions))
-            outputs.append(_write_png(diagrams_dir / f"{view.filename}.png", view, nodes, edges, positions))
-            outputs.append(_write_pdf(diagrams_dir / f"{view.filename}.pdf", view, nodes, edges, positions))
+        positions = _layout(nodes)
+        outputs.append(_write_svg(diagrams_dir / f"{view.filename}.svg", view, nodes, edges, positions))
+        outputs.append(_write_png(diagrams_dir / f"{view.filename}.png", view, nodes, edges, positions))
+        outputs.append(_write_pdf(diagrams_dir / f"{view.filename}.pdf", view, nodes, edges, positions))
         outputs.append(_write_mermaid(diagrams_dir / f"{view.filename}.mmd", view, nodes, edges))
-        outputs.extend(
-            write_editable_outputs(
-                diagrams_dir / view.filename,
-                view.title,
-                nodes,
-                edges,
-                positions,
-                node_width=NODE_WIDTH,
-                node_height=NODE_HEIGHT,
-            )
-        )
     return outputs
 
 
@@ -182,7 +164,7 @@ def render_service_drilldown(
         raise ValueError(f"Service {service_id} does not exist in graph.")
     diagrams_dir.mkdir(parents=True, exist_ok=True)
     nodes, edges = _select_service_drilldown(graph, service_id, max(1, depth), direction, risk_focus)
-    positions = _layout(nodes, column_gap=160)
+    positions = _layout(nodes)
     base = f"service_drilldown_{safe_id(service_id)}"
     detail = f"depth={max(1, depth)} | direction={direction}"
     if risk_focus:
@@ -193,32 +175,13 @@ def render_service_drilldown(
         _write_png(diagrams_dir / f"{base}.png", view, nodes, edges, positions),
         _write_pdf(diagrams_dir / f"{base}.pdf", view, nodes, edges, positions),
         _write_mermaid(diagrams_dir / f"{base}.mmd", view, nodes, edges),
-        *write_editable_outputs(
-            diagrams_dir / base,
-            view.title,
-            nodes,
-            edges,
-            positions,
-            node_width=NODE_WIDTH,
-            node_height=NODE_HEIGHT,
-        ),
     ]
 
 
 def _select_view(graph: GraphModel, view: View) -> tuple[list[GraphNode], list[GraphEdge]]:
     included_edges = [edge for edge in graph.edges if edge.type in view.edge_types]
-    endpoint_only = False
-    if view.filename == "03_service_dependency_layer":
-        included_edges = [edge for edge in included_edges if edge.type in DATAFLOW_EDGES]
-        endpoint_only = True
-    elif view.filename == "05_security_monitoring_layer":
-        included_edges = [edge for edge in included_edges if edge.type in {"allowed_by", "protected_by", "uses_sa", "monitored_by"}]
-        endpoint_only = True
     node_ids = {edge.source for edge in included_edges}.union(edge.target for edge in included_edges)
-    if endpoint_only:
-        nodes = [node for node in graph.nodes.values() if node.id in node_ids]
-    else:
-        nodes = [node for node in graph.nodes.values() if node.type in view.node_types or node.id in node_ids]
+    nodes = [node for node in graph.nodes.values() if node.type in view.node_types or node.id in node_ids]
     node_ids = {node.id for node in nodes}
     edges = [edge for edge in included_edges if edge.source in node_ids and edge.target in node_ids]
     if view.filename == "00_overview":
@@ -310,19 +273,13 @@ def _select_service_drilldown(graph: GraphModel, service_id: str, depth: int, di
     return nodes, deduped_edges
 
 
-def _view_column_gap(view: View) -> int:
-    if view.filename in {"03_service_dependency_layer", "05_security_monitoring_layer"}:
-        return 180
-    return COLUMN_GAP
-
-
-def _layout(nodes: list[GraphNode], column_gap: int = COLUMN_GAP) -> dict[str, tuple[int, int]]:
+def _layout(nodes: list[GraphNode]) -> dict[str, tuple[int, int]]:
     columns: dict[int, list[GraphNode]] = {}
     for node in sorted(nodes, key=lambda item: (_node_order(item), item.group.lower(), item.label.lower(), item.id)):
         columns.setdefault(_node_order(node), []).append(node)
 
     positions: dict[str, tuple[int, int]] = {}
-    x_step = NODE_WIDTH + column_gap
+    x_step = NODE_WIDTH + COLUMN_GAP
     y_step = NODE_HEIGHT + ROW_GAP
     for col_idx, col in enumerate(sorted(columns)):
         for row_idx, node in enumerate(columns[col]):
@@ -344,48 +301,10 @@ def _size(positions: dict[str, tuple[int, int]]) -> tuple[int, int]:
     return max(width, MIN_WIDTH), max(height, MIN_HEIGHT)
 
 
-def _edge_routes(edges: list[GraphEdge], positions: dict[str, tuple[int, int]]) -> dict[str, list[tuple[float, float]]]:
-    visible = [edge for edge in edges if edge.source in positions and edge.target in positions]
-    ordered = sorted(visible, key=lambda edge: (edge.source, edge.target, edge.type, edge.id))
-    lane_counts: dict[tuple[int, int], int] = {}
-    routes: dict[str, list[tuple[float, float]]] = {}
-    for edge in ordered:
-        key = (positions[edge.source][0], positions[edge.target][0])
-        lane = lane_counts.get(key, 0)
-        lane_counts[key] = lane + 1
-        routes[edge.id] = _orthogonal_edge_points(edge, positions[edge.source], positions[edge.target], lane)
-    return routes
-
-
-def _orthogonal_edge_points(edge: GraphEdge, source: tuple[int, int], target: tuple[int, int], lane: int) -> list[tuple[float, float]]:
-    x1, y1 = source
-    x2, y2 = target
-    sy = y1 + NODE_HEIGHT / 2
-    ty = y2 + NODE_HEIGHT / 2
-    lane_offset = ((lane % 9) - 4) * 18 if lane else 0
-    if x1 < x2:
-        start = (x1 + NODE_WIDTH, sy)
-        end = (x2, ty)
-        if abs(start[1] - end[1]) < 8:
-            return [start, end]
-        mid_x = (start[0] + end[0]) / 2 + lane_offset
-        return [start, (mid_x, start[1]), (mid_x, end[1]), end]
-    if x1 > x2:
-        start = (x1, sy)
-        end = (x2 + NODE_WIDTH, ty)
-        gutter = max(x1 + NODE_WIDTH, x2 + NODE_WIDTH) + 72 + lane * 30
-        return [start, (gutter, start[1]), (gutter, end[1]), end]
-    start = (x1 + NODE_WIDTH, sy)
-    end = (x2 + NODE_WIDTH, ty)
-    gutter = x1 + NODE_WIDTH + 70 + lane * 30
-    return [start, (gutter, start[1]), (gutter, end[1]), end]
-
-
 def _write_svg(path: Path, view: View, nodes: list[GraphNode], edges: list[GraphEdge], positions: dict[str, tuple[int, int]]) -> Path:
     width, height = _size(positions)
     dark = _is_security_view(view)
     palette = _palette(dark)
-    routes = _edge_routes(edges, positions)
     marker_fill = palette["edge"]
     title_note = "Security Review Focus | controls, identity, monitoring" if dark else "Structurizr/C4-style architecture view | generated from workbook graph"
     lines = [
@@ -404,35 +323,24 @@ def _write_svg(path: Path, view: View, nodes: list[GraphNode], edges: list[Graph
     ]
     _append_svg_legend(lines, width, nodes, dark, palette)
 
-    label_boxes: list[tuple[float, float, float, float]] = []
     for edge in edges:
         if edge.source not in positions or edge.target not in positions:
             continue
         dashed = _edge_is_control(edge)
         edge_color = _edge_color(edge, dark, palette)
-        points = routes.get(edge.id) or _orthogonal_edge_points(edge, positions[edge.source], positions[edge.target], 0)
-        point_text = " ".join(f"{x:.1f},{y:.1f}" for x, y in points)
+        points = _edge_curve_points(positions[edge.source], positions[edge.target])
+        path_data = _svg_path(points)
         dash = ' stroke-dasharray="8 7"' if dashed else ""
         width_attr = "1.8" if dashed else "2.2"
         edge_title = _edge_accessible_label(edge)
         risk_level = _edge_risk_level(edge)
-        source_sheet = str(edge.metadata.get("source_sheet", "")) if isinstance(edge.metadata, dict) else ""
-        record_id = str(edge.metadata.get("record_id", "")) if isinstance(edge.metadata, dict) else ""
-        edge_attrs = (
-            f'data-edge-id="{xml_escape(edge.id)}" data-edge-type="{xml_escape(edge.type)}" '
-            f'data-source="{xml_escape(edge.source)}" data-target="{xml_escape(edge.target)}" '
-            f'data-source-sheet="{xml_escape(source_sheet)}" data-source-record="{xml_escape(record_id)}"'
-        )
-        lines.append(f'<g role="img" aria-label="{xml_escape(edge_title)}" data-risk-level="{risk_level}" {edge_attrs}>')
+        lines.append(f'<g role="img" aria-label="{xml_escape(edge_title)}" data-risk-level="{risk_level}">')
         lines.append(f'<title>{xml_escape(edge_title)}</title>')
-        lines.append(f'<polyline points="{point_text}" fill="none" stroke="{edge_color}" stroke-width="{width_attr}" marker-end="url(#arrow)" opacity="{palette["edge_opacity"]}" stroke-linecap="round" stroke-linejoin="round"{dash}/>')
+        lines.append(f'<path d="{path_data}" fill="none" stroke="{edge_color}" stroke-width="{width_attr}" marker-end="url(#arrow)" opacity="{palette["edge_opacity"]}"{dash}/>')
         label = _edge_label(edge)
         if label:
-            lx, ly = _polyline_label_position(points)
+            lx, ly = _edge_label_position(points)
             label_width = max(54, min(190, len(label) * 6 + 22))
-            lx, ly = _avoid_label_collision(lx, ly, label_width, 20, label_boxes)
-            label_boxes.append((lx - label_width / 2, ly - 12, lx + label_width / 2, ly + 8))
-            lines.append(f'<circle cx="{lx - label_width / 2 - 8:.1f}" cy="{ly - 2:.1f}" r="3.5" fill="{edge_color}"/>')
             lines.append(f'<rect x="{lx - label_width / 2:.1f}" y="{ly - 12:.1f}" width="{label_width}" height="20" rx="10" fill="{palette["edge_label_bg"]}" stroke="{palette["border"]}" stroke-width="0.6"/>')
             lines.append(f'<text x="{lx:.1f}" y="{ly + 3:.1f}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="600" fill="{palette["edge_label_text"]}">{xml_escape(label)}</text>')
         lines.append("</g>")
@@ -450,7 +358,6 @@ def _write_png(path: Path, view: View, nodes: list[GraphNode], edges: list[Graph
     width, height = _size(positions)
     dark = _is_security_view(view)
     palette = _palette(dark)
-    routes = _edge_routes(edges, positions)
     image = Image.new("RGB", (width, height), palette["bg"])
     draw = ImageDraw.Draw(image)
     title_font = _font(26, bold=True)
@@ -469,22 +376,18 @@ def _write_png(path: Path, view: View, nodes: list[GraphNode], edges: list[Graph
     draw.rounded_rectangle((LEFT_MARGIN - 24, HEADER_HEIGHT + 14, width - RIGHT_MARGIN + 24, height - 30), radius=18, fill=palette["panel"], outline=palette["border"])
     _draw_png_legend(draw, width, nodes, dark, palette, small_font)
 
-    label_boxes: list[tuple[float, float, float, float]] = []
     for edge in edges:
         if edge.source not in positions or edge.target not in positions:
             continue
-        points = routes.get(edge.id) or _orthogonal_edge_points(edge, positions[edge.source], positions[edge.target], 0)
+        points = _sampled_edge_points(positions[edge.source], positions[edge.target])
         dashed = _edge_is_control(edge)
         edge_color = _edge_color(edge, dark, palette)
         _draw_polyline(draw, points, edge_color, width=3 if not dashed else 2, dashed=dashed)
         _draw_arrowhead(draw, points[-2], points[-1], edge_color)
         label = _edge_label(edge)
         if label:
-            lx, ly = _polyline_label_position(points)
+            lx, ly = _edge_label_position(_edge_curve_points(positions[edge.source], positions[edge.target]))
             label_width = max(58, min(190, _text_width(draw, label, label_font) + 22))
-            lx, ly = _avoid_label_collision(lx, ly, label_width, 21, label_boxes)
-            label_boxes.append((lx - label_width / 2, ly - 12, lx + label_width / 2, ly + 9))
-            draw.ellipse((lx - label_width / 2 - 12, ly - 6, lx - label_width / 2 - 5, ly + 1), fill=edge_color)
             draw.rounded_rectangle((lx - label_width / 2, ly - 12, lx + label_width / 2, ly + 9), radius=10, fill=palette["edge_label_bg"], outline=palette["border"])
             draw.text((lx - _text_width(draw, label, label_font) / 2, ly - 8), label, fill=palette["edge_label_text"], font=label_font)
 
@@ -502,7 +405,6 @@ def _write_pdf(path: Path, view: View, nodes: list[GraphNode], edges: list[Graph
     page_width, page_height = page_size
     dark = _is_security_view(view)
     palette = _palette(dark)
-    routes = _edge_routes(edges, positions)
     c = canvas.Canvas(str(path), pagesize=page_size)
 
     _pdf_fill(c, palette["bg"])
@@ -525,27 +427,23 @@ def _write_pdf(path: Path, view: View, nodes: list[GraphNode], edges: list[Graph
     _pdf_stroke(c, palette["border"])
     c.roundRect(LEFT_MARGIN - 24, 30, page_width - LEFT_MARGIN - RIGHT_MARGIN + 48, page_height - HEADER_HEIGHT - 44, 18, fill=1, stroke=1)
 
-    label_boxes: list[tuple[float, float, float, float]] = []
     for edge in edges:
         if edge.source not in positions or edge.target not in positions:
             continue
-        points = routes.get(edge.id) or _orthogonal_edge_points(edge, positions[edge.source], positions[edge.target], 0)
+        p0, _p1, _p2, p3 = _edge_curve_points(positions[edge.source], positions[edge.target])
         dashed = _edge_is_control(edge)
         edge_color = _edge_color(edge, dark, palette)
         _pdf_stroke(c, edge_color)
         c.setLineWidth(1.4 if dashed else 1.8)
         if dashed:
             c.setDash(7, 5)
-        for p0, p1 in zip(points, points[1:]):
-            c.line(p0[0], page_height - p0[1], p1[0], page_height - p1[1])
+        c.line(p0[0], page_height - p0[1], p3[0], page_height - p3[1])
         c.setDash()
-        _draw_pdf_arrowhead(c, points[-2], points[-1], page_height, edge_color)
+        _draw_pdf_arrowhead(c, p0, p3, page_height, edge_color)
         label = _edge_label(edge)
         if label:
-            lx, ly = _polyline_label_position(points)
+            lx, ly = (p0[0] + p3[0]) / 2, (p0[1] + p3[1]) / 2 - 4
             label_width = max(54, min(180, len(label) * 5 + 22))
-            lx, ly = _avoid_label_collision(lx, ly, label_width, 18, label_boxes)
-            label_boxes.append((lx - label_width / 2, ly - 10, lx + label_width / 2, ly + 8))
             _pdf_fill(c, palette["edge_label_bg"])
             _pdf_stroke(c, palette["border"])
             c.roundRect(lx - label_width / 2, page_height - ly - 10, label_width, 18, 9, fill=1, stroke=1)
@@ -583,153 +481,6 @@ def _write_mermaid(path: Path, view: View, nodes: list[GraphNode], edges: list[G
     )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
-
-
-def _write_security_matrix_svg(path: Path, view: View, graph: GraphModel, edges: list[GraphEdge]) -> Path:
-    rows = _security_matrix_rows(graph, edges)
-    width = 1720
-    row_height = 96
-    height = max(680, HEADER_HEIGHT + 118 + len(rows) * row_height + 64)
-    palette = _palette(True)
-    lines = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img" aria-label="{xml_escape(view.title)} coverage matrix">',
-        f'<rect width="100%" height="100%" fill="{palette["bg"]}"/>',
-        f'<rect x="0" y="0" width="{width}" height="{HEADER_HEIGHT}" fill="{palette["header"]}" stroke="{palette["border"]}" stroke-width="1"/>',
-        f'<rect x="40" y="34" width="7" height="54" rx="3.5" fill="{palette["accent"]}"/>',
-        f'<text x="64" y="48" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700" fill="{palette["text"]}">{xml_escape(view.title)}</text>',
-        f'<text x="64" y="76" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="{palette["muted"]}">Security Review Focus | coverage matrix generated from workbook graph</text>',
-        f'<text x="64" y="98" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="{palette["muted"]}">{len(rows)} protected or monitored objects | {len(edges)} traced controls</text>',
-        f'<rect x="42" y="{HEADER_HEIGHT + 22}" width="{width - 84}" height="{height - HEADER_HEIGHT - 50}" rx="18" fill="{palette["panel"]}" stroke="{palette["border"]}" stroke-width="1"/>',
-    ]
-    columns = [(72, 330, "Object"), (430, 560, "Security controls"), (1020, 560, "Monitoring coverage")]
-    for x, w, label in columns:
-        lines.append(f'<text x="{x}" y="{HEADER_HEIGHT + 64}" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" fill="{palette["muted"]}">{label}</text>')
-    y = HEADER_HEIGHT + 88
-    for row in rows:
-        source = row["source"]
-        lines.append(f'<rect x="64" y="{y - 24}" width="{width - 128}" height="{row_height - 16}" rx="14" fill="#111B2F" stroke="#334155" stroke-width="1"/>')
-        _append_security_svg_source(lines, source, 82, y)
-        _append_security_svg_badges(lines, row["security"], 430, y - 6, 540, "#DC2626", "#451A1A", "No security control edge captured")
-        _append_security_svg_badges(lines, row["monitoring"], 1020, y - 6, 540, "#16A34A", "#123321", "No monitoring edge captured")
-        y += row_height
-    lines.append("</svg>")
-    path.write_text("\n".join(lines), encoding="utf-8")
-    return path
-
-
-def _write_security_matrix_png(path: Path, view: View, graph: GraphModel, edges: list[GraphEdge]) -> Path:
-    rows = _security_matrix_rows(graph, edges)
-    width = 1720
-    row_height = 96
-    height = max(680, HEADER_HEIGHT + 118 + len(rows) * row_height + 64)
-    palette = _palette(True)
-    image = Image.new("RGB", (width, height), palette["bg"])
-    draw = ImageDraw.Draw(image)
-    title_font = _font(26, bold=True)
-    header_font = _font(12, bold=True)
-    source_font = _font(13, bold=True)
-    small_font = _font(10)
-    draw.rectangle((0, 0, width, HEADER_HEIGHT), fill=palette["header"], outline=palette["border"])
-    draw.rounded_rectangle((40, 34, 47, 88), radius=4, fill=palette["accent"])
-    draw.text((64, 26), view.title, fill=palette["text"], font=title_font)
-    draw.text((64, 63), "Security Review Focus | coverage matrix generated from workbook graph", fill=palette["muted"], font=_font(13))
-    draw.text((64, 91), f"{len(rows)} protected or monitored objects | {len(edges)} traced controls", fill=palette["muted"], font=small_font)
-    draw.rounded_rectangle((42, HEADER_HEIGHT + 22, width - 42, height - 28), radius=18, fill=palette["panel"], outline=palette["border"])
-    for x, label in ((72, "Object"), (430, "Security controls"), (1020, "Monitoring coverage")):
-        draw.text((x, HEADER_HEIGHT + 52), label, fill=palette["muted"], font=header_font)
-    y = HEADER_HEIGHT + 88
-    for row in rows:
-        draw.rounded_rectangle((64, y - 24, width - 64, y + row_height - 40), radius=14, fill="#111B2F", outline="#334155")
-        source = row["source"]
-        draw.text((82, y - 5), _clip(source.label, 36), fill=palette["text"], font=source_font)
-        draw.text((82, y + 18), f"{source.type} | {source.sheet}", fill=palette["muted"], font=small_font)
-        _draw_security_png_badges(draw, row["security"], 430, y - 8, 540, "#DC2626", "#451A1A", "No security control edge captured", small_font)
-        _draw_security_png_badges(draw, row["monitoring"], 1020, y - 8, 540, "#16A34A", "#123321", "No monitoring edge captured", small_font)
-        y += row_height
-    image.save(path)
-    return path
-
-
-def _write_security_matrix_pdf(path: Path, view: View, graph: GraphModel, edges: list[GraphEdge]) -> Path:
-    png_path = path.with_suffix(".pdf.png")
-    _write_security_matrix_png(png_path, view, graph, edges)
-    image = Image.open(png_path)
-    width, height = image.size
-    c = canvas.Canvas(str(path), pagesize=(width, height))
-    c.drawImage(str(png_path), 0, 0, width=width, height=height)
-    c.save()
-    png_path.unlink(missing_ok=True)
-    return path
-
-
-def _security_matrix_rows(graph: GraphModel, edges: list[GraphEdge]) -> list[dict[str, object]]:
-    grouped: dict[str, dict[str, object]] = {}
-    for edge in edges:
-        source = graph.nodes.get(edge.source)
-        if not source:
-            continue
-        row = grouped.setdefault(edge.source, {"source": source, "security": [], "monitoring": []})
-        if edge.type == "monitored_by":
-            row["monitoring"].append(edge)  # type: ignore[union-attr]
-        else:
-            row["security"].append(edge)  # type: ignore[union-attr]
-    return sorted(grouped.values(), key=lambda row: (_node_order(row["source"]), row["source"].label.lower()))  # type: ignore[index, union-attr]
-
-
-def _append_security_svg_source(lines: list[str], node: GraphNode, x: int, y: int) -> None:
-    lines.append(f'<text x="{x}" y="{y}" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" fill="#F8FAFC">{xml_escape(_clip(node.label, 38))}</text>')
-    lines.append(f'<text x="{x}" y="{y + 23}" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#AEBBD0">{xml_escape(node.type)} | {xml_escape(node.sheet)}</text>')
-
-
-def _append_security_svg_badges(lines: list[str], edges: list[GraphEdge], x: int, y: int, width: int, color: str, fill: str, empty: str) -> None:
-    if not edges:
-        lines.append(f'<rect x="{x}" y="{y}" width="{width}" height="32" rx="10" fill="#172033" stroke="#334155" stroke-width="1"/>')
-        lines.append(f'<text x="{x + 14}" y="{y + 21}" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#AEBBD0">{xml_escape(empty)}</text>')
-        return
-    for idx, edge in enumerate(edges[:3]):
-        bx = x
-        by = y + idx * 26
-        label = _security_badge_label(edge)
-        record_id = str(edge.metadata.get("record_id", "")) if isinstance(edge.metadata, dict) else ""
-        lines.append(f'<g data-edge-id="{xml_escape(edge.id)}" data-edge-type="{xml_escape(edge.type)}" data-source="{xml_escape(edge.source)}" data-target="{xml_escape(edge.target)}" data-source-record="{xml_escape(record_id)}">')
-        lines.append(f'<title>{xml_escape(_edge_accessible_label(edge))}</title>')
-        lines.append(f'<rect x="{bx}" y="{by}" width="{width}" height="22" rx="11" fill="{fill}" stroke="{color}" stroke-width="1.2"/>')
-        lines.append(f'<text x="{bx + 12}" y="{by + 15}" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" fill="#F8FAFC">{xml_escape(label)}</text>')
-        lines.append("</g>")
-    if len(edges) > 3:
-        lines.append(f'<text x="{x + 12}" y="{y + 84}" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#AEBBD0">+{len(edges) - 3} more traced edges</text>')
-
-
-def _draw_security_png_badges(
-    draw: ImageDraw.ImageDraw,
-    edges: list[GraphEdge],
-    x: int,
-    y: int,
-    width: int,
-    color: str,
-    fill: str,
-    empty: str,
-    font: ImageFont.ImageFont,
-) -> None:
-    if not edges:
-        draw.rounded_rectangle((x, y, x + width, y + 32), radius=10, fill="#172033", outline="#334155")
-        draw.text((x + 14, y + 9), empty, fill="#AEBBD0", font=font)
-        return
-    for idx, edge in enumerate(edges[:3]):
-        by = y + idx * 26
-        draw.rounded_rectangle((x, by, x + width, by + 22), radius=11, fill=fill, outline=color)
-        draw.text((x + 12, by + 5), _clip(_security_badge_label(edge), 68), fill="#F8FAFC", font=font)
-    if len(edges) > 3:
-        draw.text((x + 12, y + 80), f"+{len(edges) - 3} more traced edges", fill="#AEBBD0", font=font)
-
-
-def _security_badge_label(edge: GraphEdge) -> str:
-    record_id = str(edge.metadata.get("record_id", "")) if isinstance(edge.metadata, dict) else ""
-    label = edge.label or edge.type
-    prefix = record_id or edge.id
-    if edge.status != "Confirmed":
-        return _clip(f"{prefix} | {edge.status} | {label}", 74)
-    return _clip(f"{prefix} | {label}", 74)
 
 
 def _append_svg_node(lines: list[str], node: GraphNode, x: int, y: int, dark: bool, palette: dict[str, str]) -> None:
@@ -1002,41 +753,6 @@ def _cubic(p0: tuple[float, float], p1: tuple[float, float], p2: tuple[float, fl
 
 def _edge_label_position(points: tuple[tuple[float, float], tuple[float, float], tuple[float, float], tuple[float, float]]) -> tuple[float, float]:
     return _cubic(points[0], points[1], points[2], points[3], 0.5)
-
-
-def _polyline_label_position(points: list[tuple[float, float]]) -> tuple[float, float]:
-    if len(points) < 2:
-        return points[0] if points else (0.0, 0.0)
-    start, end = max(zip(points, points[1:]), key=lambda pair: (pair[1][0] - pair[0][0]) ** 2 + (pair[1][1] - pair[0][1]) ** 2)
-    lx = (start[0] + end[0]) / 2
-    ly = (start[1] + end[1]) / 2 - 10
-    if abs(end[0] - start[0]) < abs(end[1] - start[1]):
-        lx += 54
-        ly += 8
-    return lx, ly
-
-
-def _avoid_label_collision(
-    lx: float,
-    ly: float,
-    width: float,
-    height: float,
-    occupied: list[tuple[float, float, float, float]],
-) -> tuple[float, float]:
-    def box_at(x: float, y: float) -> tuple[float, float, float, float]:
-        return (x - width / 2 - 4, y - height / 2 - 4, x + width / 2 + 4, y + height / 2 + 4)
-
-    def overlaps(box: tuple[float, float, float, float]) -> bool:
-        return any(not (box[2] < item[0] or box[0] > item[2] or box[3] < item[1] or box[1] > item[3]) for item in occupied)
-
-    candidates = [(lx, ly)]
-    for step in range(1, 7):
-        candidates.append((lx, ly - step * 24))
-        candidates.append((lx, ly + step * 24))
-    for candidate_x, candidate_y in candidates:
-        if not overlaps(box_at(candidate_x, candidate_y)):
-            return candidate_x, candidate_y
-    return candidates[-1]
 
 
 def _draw_polyline(draw: ImageDraw.ImageDraw, points: list[tuple[float, float]], fill: str, width: int, dashed: bool) -> None:

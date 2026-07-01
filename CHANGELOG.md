@@ -23,9 +23,6 @@
 - `query-port` JSON 输出增加 source row、Evidence_ID 和 graph edge 追踪信息。
 - `metadata.json` 增加 `schema_version` 和 `template_version`，README 增加 schema / template 兼容关系。
 - Overview renderer 拆分为独立模块，降低后续图形优化的维护风险。
-- 分层图新增 draw.io `.drawio` 可编辑源图和 GraphML `.graphml` 工具交换文件，便于拖拽调整和导入专业图形工具。
-- 服务依赖图减少 runtime / Firewall 控制线干扰，优先展示真实服务、数据资产和外部依赖数据流。
-- 通用图层边路由改为正交折线和线段锚定标签，降低线条交叉、重叠和标签归属不清的问题。
 
 ### Fixed
 
@@ -137,9 +134,6 @@ This file records user-visible changes to Dataflow Agent. The repository does no
 - Added source row, Evidence_ID, and graph edge traceability to `query-port` JSON output.
 - Added `schema_version` and `template_version` to `metadata.json`; README now documents schema / template compatibility.
 - Split the overview renderer into its own module to reduce diagram-renderer maintenance risk.
-- Added draw.io `.drawio` editable source files and GraphML `.graphml` exchange files for layered diagrams, enabling drag editing and import into professional diagram tools.
-- Reduced runtime / Firewall control-line noise in the service dependency diagram so it prioritizes real service, data asset, and external dependency data flows.
-- Changed common diagram edge routing to orthogonal polylines with segment-anchored labels, reducing line crossings, overlaps, and unclear label ownership.
 
 ### Fixed
 
