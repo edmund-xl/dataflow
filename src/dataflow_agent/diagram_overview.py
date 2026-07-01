@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -39,6 +39,8 @@ OVERVIEW_CONTEXT_EDGES = {"runs_on", "runs_on_runtime", "allowed_by", "protected
 OVERVIEW_NODE_WIDTH = 230
 OVERVIEW_NODE_HEIGHT = 94
 OVERVIEW_LEDGER_WIDTH = 430
+OVERVIEW_INLINE_LABEL_WIDTH = 320
+OVERVIEW_INLINE_LABEL_HEIGHT = 58
 LEFT_MARGIN = 72
 
 
@@ -83,6 +85,7 @@ class OverviewLayout:
     perimeter_edges: list[GraphEdge]
     all_edges: list[GraphEdge]
     edge_routes: dict[str, list[tuple[float, float]]]
+    inline_labels: dict[str, "OverviewInlineLabel"]
     layout_engine: str = "builtin"
 
 
@@ -92,6 +95,16 @@ class OverviewLineBridge:
     y: float
     color: str
     edge_id: str
+
+
+@dataclass(frozen=True)
+class OverviewInlineLabel:
+    x: float
+    y: float
+    width: int
+    height: int
+    anchor_x: float
+    anchor_y: float
 
 
 def _overview_layout(graph: GraphModel) -> OverviewLayout:
@@ -115,7 +128,7 @@ def _overview_layout(graph: GraphModel) -> OverviewLayout:
     ]
     runtime_edges = [edge for edge in context_edges if edge.type in {"runs_on", "runs_on_runtime"}]
     perimeter_edges = [edge for edge in context_edges if edge.type == "protected_by"]
-    return OverviewLayout(
+    layout = OverviewLayout(
         width=width,
         height=height,
         lane_width=lane_width,
@@ -132,8 +145,10 @@ def _overview_layout(graph: GraphModel) -> OverviewLayout:
         perimeter_edges=perimeter_edges,
         all_edges=graph.edges,
         edge_routes=edge_routes,
+        inline_labels={},
         layout_engine=layout_engine,
     )
+    return replace(layout, inline_labels=_overview_inline_labels(layout))
 
 
 def _overview_positions_and_routes(
@@ -372,6 +387,7 @@ def _write_overview_svg(path: Path, view: View, layout: OverviewLayout) -> Path:
             _append_overview_svg_node(lines, node, position[0], position[1])
             _append_overview_svg_node_badges(lines, node, position[0], position[1], layout)
     _append_overview_svg_runtime_chips(lines, layout)
+    _append_overview_svg_inline_edge_details(lines, layout)
     _append_overview_svg_control_cards(lines, layout)
     _append_overview_svg_ledger(lines, layout)
     lines.append(
@@ -433,22 +449,41 @@ def _append_overview_svg_edge(lines: list[str], edge: GraphEdge, layout: Overvie
     dash = ' stroke-dasharray="9 7"' if _status_kind(edge.status) == "pending" else ""
     point_text = " ".join(f"{x},{y}" for x, y in points)
     risk = _edge_risk_level(edge)
-    label = _overview_edge_display_label(edge, layout)
-    label_x, label_y = _overview_label_anchor(points)
     edge_number = layout.main_edges.index(edge) + 1 if edge in layout.main_edges else 0
     lines.append(f'<g role="img" aria-label="{xml_escape(_edge_accessible_label(edge))}" data-risk-level="{risk}">')
     lines.append(f'<title>{xml_escape(_edge_accessible_label(edge))}</title>')
     lines.append(f'<polyline points="{point_text}" fill="none" stroke="#FFFFFF" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round" data-overview-role="main-dataflow-halo" data-edge-id="{xml_escape(edge.id)}" data-edge-number="E{edge_number}"/>')
     lines.append(f'<polyline points="{point_text}" fill="none" stroke="{color}" stroke-width="{_overview_edge_width(edge)}" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#{marker})"{dash} data-overview-role="main-dataflow" data-edge-id="{xml_escape(edge.id)}" data-edge-number="E{edge_number}" data-edge-type="{xml_escape(edge.type)}" data-source="{xml_escape(edge.source)}" data-target="{xml_escape(edge.target)}"/>')
-    if layout.layout_engine == "elk":
-        badge_x, badge_y = label_x - 23, label_y - 14
-    else:
-        lines.append(f'<circle cx="{label_x}" cy="{label_y}" r="6" fill="{color}"/>')
-        badge_x, badge_y = _overview_label_badge_position(edge, points, layout)
-    _append_overview_svg_badge(lines, badge_x, badge_y, label, color, _overview_edge_label_fill(edge), "main-dataflow-label", edge)
-    if layout.layout_engine != "elk":
-        lines.append(f'<polyline points="{label_x},{label_y} {label_x},{badge_y + 14}" fill="none" stroke="{color}" stroke-width="1.2" stroke-linecap="round"/>')
     lines.append("</g>")
+
+
+def _append_overview_svg_inline_edge_details(lines: list[str], layout: OverviewLayout) -> None:
+    for edge_number, edge in enumerate(layout.main_edges, start=1):
+        inline_label = layout.inline_labels.get(edge.id)
+        if not inline_label:
+            continue
+        color = _overview_edge_color(edge)
+        fill = _overview_edge_label_fill(edge)
+        x = inline_label.x
+        y = inline_label.y
+        center_x = x + inline_label.width / 2
+        center_y = y + inline_label.height / 2
+        if abs(center_x - inline_label.anchor_x) > 70 or abs(center_y - inline_label.anchor_y) > 44:
+            lines.append(
+                f'<line x1="{inline_label.anchor_x:.1f}" y1="{inline_label.anchor_y:.1f}" x2="{center_x:.1f}" y2="{center_y:.1f}" stroke="{color}" stroke-width="1" stroke-dasharray="3 6" opacity="0.45" data-overview-role="main-dataflow-label-leader" data-edge-id="{xml_escape(edge.id)}"/>'
+            )
+        detail = _overview_edge_inline_detail(edge)
+        source_target = f"{_short_node_id(edge.source)} -> {_short_node_id(edge.target)}"
+        record_ids = _overview_equivalent_record_ids(edge, layout.all_edges)
+        lines.append(f'<g data-overview-role="inline-edge-detail" data-edge-id="{xml_escape(edge.id)}" data-edge-number="E{edge_number}" data-edge-type="{xml_escape(edge.type)}" data-source="{xml_escape(edge.source)}" data-target="{xml_escape(edge.target)}">')
+        lines.append(f'<title>{xml_escape(f"E{edge_number} {detail} {source_target} {record_ids}")}</title>')
+        lines.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{inline_label.width}" height="{inline_label.height}" rx="10" fill="{fill}" stroke="{color}" stroke-width="1.4" data-overview-role="main-dataflow-label" data-edge-badge-id="{xml_escape(edge.id)}" data-edge-id="{xml_escape(edge.id)}" data-edge-type="{xml_escape(edge.type)}" data-source="{xml_escape(edge.source)}" data-target="{xml_escape(edge.target)}"/>')
+        lines.append(f'<rect x="{x + 10:.1f}" y="{y + 10:.1f}" width="42" height="24" rx="6" fill="#FFFFFF" stroke="{color}" stroke-width="1"/>')
+        lines.append(f'<text x="{x + 18:.1f}" y="{y + 27:.1f}" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" fill="{color}">E{edge_number}</text>')
+        lines.append(f'<text x="{x + 62:.1f}" y="{y + 21:.1f}" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" fill="#111827">{xml_escape(_clip(detail, 38))}</text>')
+        lines.append(f'<text x="{x + 62:.1f}" y="{y + 38:.1f}" font-family="Arial, Helvetica, sans-serif" font-size="9" fill="#334155">{xml_escape(_clip(source_target, 48))}</text>')
+        lines.append(f'<text x="{x + 62:.1f}" y="{y + 51:.1f}" font-family="Arial, Helvetica, sans-serif" font-size="8" fill="#64748B">{xml_escape(_clip(record_ids, 46))}</text>')
+        lines.append("</g>")
 
 
 def _append_overview_svg_bridges(lines: list[str], layout: OverviewLayout) -> None:
@@ -857,6 +892,107 @@ def _overview_label_badge_position(edge: GraphEdge, points: list[tuple[float, fl
     return label_x - 88, label_y - 92
 
 
+def _overview_inline_labels(layout: OverviewLayout) -> dict[str, OverviewInlineLabel]:
+    occupied: list[tuple[float, float, float, float]] = []
+    for x, y in layout.positions.values():
+        occupied.append((x - 14, y - 14, x + OVERVIEW_NODE_WIDTH + 14, y + OVERVIEW_NODE_HEIGHT + 14))
+    routes_by_edge = {edge.id: _overview_edge_points(edge, layout) for edge in layout.main_edges}
+    labels: dict[str, OverviewInlineLabel] = {}
+    for edge in layout.main_edges:
+        points = routes_by_edge.get(edge.id, [])
+        if not points:
+            continue
+        anchor_x, anchor_y = _overview_label_anchor(points)
+        base_x = anchor_x - OVERVIEW_INLINE_LABEL_WIDTH / 2 + 5
+        base_y = anchor_y - OVERVIEW_INLINE_LABEL_HEIGHT / 2 + 5
+        label = _overview_place_inline_label(base_x, base_y, edge.id, routes_by_edge, occupied, layout)
+        occupied.append((label.x, label.y, label.x + label.width, label.y + label.height))
+        labels[edge.id] = label
+    return labels
+
+
+def _overview_place_inline_label(
+    base_x: float,
+    base_y: float,
+    edge_id: str,
+    routes_by_edge: dict[str, list[tuple[float, float]]],
+    occupied: list[tuple[float, float, float, float]],
+    layout: OverviewLayout,
+) -> OverviewInlineLabel:
+    width = OVERVIEW_INLINE_LABEL_WIDTH
+    height = OVERVIEW_INLINE_LABEL_HEIGHT
+    points = routes_by_edge.get(edge_id, [])
+    anchor_x, anchor_y = _overview_label_anchor(points) if points else (base_x, base_y)
+    offsets = [
+        (0, 0),
+        (36, 0),
+        (-36, 0),
+        (0, -58),
+        (0, 58),
+        (72, -28),
+        (-72, -28),
+        (72, 48),
+        (-72, 48),
+        (0, -116),
+        (0, 116),
+        (120, -72),
+        (-120, -72),
+        (120, 92),
+        (-120, 92),
+    ]
+    candidates: list[tuple[float, float]] = []
+    for radius in range(7):
+        for dx, dy in offsets:
+            candidates.append((base_x + dx, base_y + dy + radius * 72))
+            if radius:
+                candidates.append((base_x + dx, base_y + dy - radius * 72))
+    for x, y in candidates:
+        x = max(64, min(x, layout.lane_width - width - 64))
+        y = max(layout.main_top + 48, min(y, layout.controls_top - height - 42))
+        rect = (x, y, x + width, y + height)
+        if any(_overview_rects_intersect(rect, item, 16) for item in occupied):
+            continue
+        if _overview_label_hits_unrelated_route(rect, edge_id, routes_by_edge):
+            continue
+        return OverviewInlineLabel(x=x, y=y, width=width, height=height, anchor_x=anchor_x, anchor_y=anchor_y)
+    fallback_x = max(64, min(base_x, layout.lane_width - width - 64))
+    fallback_y = max(layout.main_top + 48, min(base_y + 180, layout.controls_top - height - 42))
+    return OverviewInlineLabel(x=fallback_x, y=fallback_y, width=width, height=height, anchor_x=anchor_x, anchor_y=anchor_y)
+
+
+def _overview_rects_intersect(
+    first: tuple[float, float, float, float],
+    second: tuple[float, float, float, float],
+    pad: float = 0,
+) -> bool:
+    return not (
+        first[2] + pad <= second[0]
+        or first[0] - pad >= second[2]
+        or first[3] + pad <= second[1]
+        or first[1] - pad >= second[3]
+    )
+
+
+def _overview_label_hits_unrelated_route(
+    rect: tuple[float, float, float, float],
+    edge_id: str,
+    routes_by_edge: dict[str, list[tuple[float, float]]],
+) -> bool:
+    for route_edge_id, points in routes_by_edge.items():
+        if route_edge_id == edge_id:
+            continue
+        for start, end in zip(points, points[1:]):
+            segment_rect = (
+                min(start[0], end[0]) - 7,
+                min(start[1], end[1]) - 7,
+                max(start[0], end[0]) + 7,
+                max(start[1], end[1]) + 7,
+            )
+            if _overview_rects_intersect(rect, segment_rect):
+                return True
+    return False
+
+
 def _overview_edge_color(edge: GraphEdge) -> str:
     if _status_kind(edge.status) == "pending" or edge.type == "calls_external":
         return "#F97316"
@@ -887,6 +1023,19 @@ def _overview_edge_ledger_label(edge: GraphEdge) -> str:
     action = "write " if edge.type == "writes_to" else "read " if edge.type == "reads_from" else ""
     value = edge.label or edge.type
     return f"{action}{value}{status}".strip()
+
+
+def _overview_edge_inline_detail(edge: GraphEdge) -> str:
+    parts = [edge.type]
+    if edge.label:
+        parts.append(edge.label)
+    if edge.status:
+        parts.append(edge.status)
+    return " | ".join(parts)
+
+
+def _short_node_id(node_id: str) -> str:
+    return str(node_id).split("::", 1)[1] if "::" in str(node_id) else str(node_id)
 
 
 def _overview_node_colors(node: GraphNode) -> tuple[str, str]:
@@ -1004,6 +1153,7 @@ def _write_overview_png(path: Path, view: View, layout: OverviewLayout) -> Path:
             _draw_overview_png_node(draw, node, x, y, label_font, small_font, tiny_font)
             _draw_overview_png_node_badges(draw, node, x, y, layout, small_font)
     _draw_overview_png_runtime_chips(draw, layout, small_font)
+    _draw_overview_png_inline_edge_details(draw, layout, small_font, tiny_font)
     _draw_overview_png_control_cards(draw, layout, label_font, small_font, tiny_font)
     _draw_overview_png_ledger(draw, layout, small_font, tiny_font)
     draw.text((54, layout.height - 56), "Renderer rule: dataflow lines come only from calls / reads_from / writes_to / calls_external graph edges; runtime and controls stay as context.", fill="#475569", font=subtitle_font)
@@ -1052,14 +1202,32 @@ def _draw_overview_png_edge(draw: ImageDraw.ImageDraw, edge: GraphEdge, layout: 
     color = _overview_edge_color(edge)
     _draw_png_polyline_with_arrow(draw, points, "#FFFFFF", 10, False)
     _draw_png_polyline_with_arrow(draw, points, color, int(float(_overview_edge_width(edge))), _status_kind(edge.status) == "pending")
-    label_x, label_y = _overview_label_anchor(points)
-    if layout.layout_engine == "elk":
-        badge_x, badge_y = label_x - 23, label_y - 14
-    else:
-        badge_x, badge_y = _overview_label_badge_position(edge, points, layout)
-        draw.ellipse((label_x - 6, label_y - 6, label_x + 6, label_y + 6), fill=color)
-        draw.line((label_x, label_y, label_x, badge_y + 14), fill=color, width=1)
-    _draw_overview_png_badge(draw, badge_x, badge_y, _overview_edge_display_label(edge, layout), color, _overview_edge_label_fill(edge), font)
+
+
+def _draw_overview_png_inline_edge_details(
+    draw: ImageDraw.ImageDraw,
+    layout: OverviewLayout,
+    small_font: ImageFont.ImageFont,
+    tiny_font: ImageFont.ImageFont,
+) -> None:
+    for edge_number, edge in enumerate(layout.main_edges, start=1):
+        inline_label = layout.inline_labels.get(edge.id)
+        if not inline_label:
+            continue
+        color = _overview_edge_color(edge)
+        fill = _overview_edge_label_fill(edge)
+        x = inline_label.x
+        y = inline_label.y
+        center_x = x + inline_label.width / 2
+        center_y = y + inline_label.height / 2
+        if abs(center_x - inline_label.anchor_x) > 70 or abs(center_y - inline_label.anchor_y) > 44:
+            draw.line((inline_label.anchor_x, inline_label.anchor_y, center_x, center_y), fill=color, width=1)
+        draw.rounded_rectangle((x, y, x + inline_label.width, y + inline_label.height), radius=10, fill=fill, outline=color, width=1)
+        draw.rounded_rectangle((x + 10, y + 10, x + 52, y + 34), radius=6, fill="#FFFFFF", outline=color, width=1)
+        draw.text((x + 18, y + 12), f"E{edge_number}", fill=color, font=tiny_font)
+        draw.text((x + 62, y + 9), _clip(_overview_edge_inline_detail(edge), 38), fill="#111827", font=tiny_font)
+        draw.text((x + 62, y + 27), _clip(f"{_short_node_id(edge.source)} -> {_short_node_id(edge.target)}", 48), fill="#334155", font=tiny_font)
+        draw.text((x + 62, y + 42), _clip(_overview_equivalent_record_ids(edge, layout.all_edges), 46), fill="#64748B", font=tiny_font)
 
 
 def _draw_overview_png_bridges(draw: ImageDraw.ImageDraw, layout: OverviewLayout) -> None:

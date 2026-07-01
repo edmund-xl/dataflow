@@ -269,6 +269,7 @@ def test_overview_renderer_uses_graph_truthful_edges(tmp_path: Path) -> None:
     overview_svg = (tmp_path / "00_overview.svg").read_text(encoding="utf-8")
     main_lines = _main_dataflow_lines(overview_svg)
     main_badges = re.findall(r'data-edge-badge-id="[^"]+"', overview_svg)
+    inline_detail_cards = re.findall(r'data-overview-role="inline-edge-detail"', overview_svg)
     compact_badges = re.findall(r'<rect[^>]+width="46"[^>]+data-overview-role="main-dataflow-label"[^>]+', overview_svg)
     rendered_edge_ids = {match.group(1) for line in main_lines if (match := re.search(r'data-edge-id="([^"]+)"', line))}
     rendered_edge_types = {match.group(1) for line in main_lines if (match := re.search(r'data-edge-type="([^"]+)"', line))}
@@ -289,7 +290,8 @@ def test_overview_renderer_uses_graph_truthful_edges(tmp_path: Path) -> None:
 
     assert rendered_edge_ids >= {"edge-2000", "edge-2001", "edge-2002", "edge-2003", "edge-2004", "edge-2005"}
     assert len(main_badges) == len(main_lines)
-    assert len(compact_badges) == len(main_lines)
+    assert len(inline_detail_cards) == len(main_lines)
+    assert not compact_badges
     assert "HTTP/JSON 8545" in overview_svg
     assert "TCP 9090" in overview_svg
     assert len(rendered_routes) == len(main_lines)

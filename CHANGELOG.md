@@ -8,11 +8,10 @@
 
 ### Changed
 
-- 总览图和服务依赖图统一为“入口上下文 + 主数据流 + 控制摘要 + edge ledger”的信息丰富视图，并增强主数据流的分 lane 正交路由、线条 halo、编号标签和 ledger 回溯能力。
-- 总览图和服务依赖图的画布主线标签改为紧凑 `E1/E2/...` 编号，端口、协议、状态和来源记录统一放入右侧 edge ledger，降低线条和标签堆叠。
-- 总览图和服务依赖图新增工程制图式 line bridge / jump-over 表达，在线条交叉处显示“跨越但不连接”的小桥标记。
-- 修正 line bridge 不再用白色 gap 挖断被跨越线，并放宽 top / bottom bus 轨道，减少同向长线重合。
-- 总览图和服务依赖图正式接入 ELK layered orthogonal layout；主数据流优先由 ELK 计算节点布局和正交线路，Node.js / elkjs 不可用时回退到内置确定性布局。
+- 总览图和服务依赖图保留“入口上下文 + 主数据流 + 控制摘要 + edge ledger”的信息丰富大画布结构，并改为碰撞避让的 inline edge detail 卡片展示端口、协议、状态、来源记录、关系类型和源/目标对象。
+- 总览图和服务依赖图放宽 ELK layered orthogonal layout 的节点、层级、边与节点、边与边间距，减少局部线条、标签和节点堆叠。
+- SVG、PNG、PDF 共用同一套 inline detail 位置计算结果，避免不同格式之间出现布局不一致。
+- 主数据流仍只渲染真实 graph edge；runtime、Firewall、IAM、Monitoring 继续作为上下文摘要，不伪装成主数据流。
 
 ## 0.1.1 - 2026-07-01
 
@@ -136,11 +135,10 @@ This file records user-visible changes to Dataflow Agent. Historical development
 
 ### Changed
 
-- Unified the overview and service dependency diagrams around the information-rich entry-context, primary-dataflow, control-summary, and edge-ledger view, with stronger lane-based orthogonal routing, line halos, numbered labels, and ledger traceability for primary dataflow lines.
-- Changed canvas labels in the overview and service dependency diagrams to compact `E1/E2/...` labels, with ports, protocols, status, and source records kept in the right-side edge ledger.
-- Added engineering-style line bridge / jump-over marks to the overview and service dependency diagrams for crossings that mean "crossing, not connected".
-- Fixed line bridge rendering so it no longer cuts the crossed line with a white gap, and widened top / bottom bus lanes to reduce same-direction long-line overlap.
-- Integrated ELK layered orthogonal layout for the overview and service dependency diagrams; primary dataflow routing prefers ELK node layout and orthogonal edge routing, with a built-in deterministic fallback when Node.js / elkjs is unavailable.
+- Kept the overview and service dependency diagrams on the information-rich large-canvas structure with entry context, primary dataflow, control summary, and edge ledger, and changed primary edge annotations to collision-aware inline edge detail cards that show ports, protocols, status, source records, relationship type, and source/target objects.
+- Increased ELK layered orthogonal layout spacing for nodes, layers, edge-to-node distance, and edge-to-edge distance in the overview and service dependency diagrams to reduce local line, label, and node stacking.
+- Made SVG, PNG, and PDF share the same inline detail placement calculation so generated formats remain visually consistent.
+- Primary dataflow still renders only real graph edges; runtime, Firewall, IAM, and Monitoring remain context summaries and are not rendered as primary dataflow.
 
 ## 0.1.1 - 2026-07-01
 
