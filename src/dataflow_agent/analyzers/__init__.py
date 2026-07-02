@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .critical_path import CriticalServiceImpact, analyze_critical_paths, write_critical_path_report
 from .data_quality import analyze_data_quality, write_data_quality_report
 from .indexes import AnalysisIndexes, build_analysis_indexes
 from .models import AnalysisFinding, AnalysisReportSummary
@@ -26,6 +27,8 @@ __all__ = [
     "AnalysisFinding",
     "AnalysisIndexes",
     "AnalysisReportSummary",
+    "CriticalServiceImpact",
+    "analyze_critical_paths",
     "analyze_data_quality",
     "analyze_monitoring_gaps",
     "analyze_security_risks",
@@ -35,6 +38,7 @@ __all__ = [
     "security_control_gap_rows",
     "sensitive_data_flow_rows",
     "suggested_alerts_rows",
+    "write_critical_path_report",
     "write_data_quality_report",
     "write_monitoring_gap_report",
     "write_monitoring_requirements_csv",
