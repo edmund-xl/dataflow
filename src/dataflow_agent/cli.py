@@ -10,6 +10,7 @@ from .defaults import default_build_output, default_check_output, default_merge_
 from .graph_builder import build_graph
 from .merge import merge_dcps
 from .normalizer import normalize_workbook
+from .analyzers import build_change_diff, write_change_diff_report
 from .pipeline import (
     load_state,
     run_all,
@@ -68,6 +69,11 @@ def main(argv: list[str] | None = None) -> int:
     port_parser.add_argument("--env", help="Environment name; defaults to 00_Metadata.Environment")
     port_parser.add_argument("--version", help="Package version; defaults to 00_Metadata.Version")
     port_parser.add_argument("--output", help="Output JSON file; defaults to <DCP>/dist/service_ports_<Service_ID>.json")
+
+    diff_parser = subparsers.add_parser("diff", help="Compare two DCP or graph JSON sources for rollout risk")
+    diff_parser.add_argument("--base", required=True, help="Base DCP directory, workbook path, or dataflow_graph.json")
+    diff_parser.add_argument("--new", required=True, help="New DCP directory, workbook path, or dataflow_graph.json")
+    diff_parser.add_argument("--output", required=True, help="Output directory")
 
     for command in ["validate", "normalize", "build", "risk", "render", "report", "package", "run"]:
         _add_common(subparsers.add_parser(command))
@@ -159,6 +165,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Outbound dependencies: {len(index['outbound_dependencies'])}")
         print(f"Firewall rules: {len(index['firewall_rules'])}")
         print(f"Monitoring rows: {len(index['monitoring'])}")
+        return 0
+
+    if args.command == "diff":
+        diff = build_change_diff(Path(args.base), Path(args.new))
+        outputs = write_change_diff_report(Path(args.output).resolve(), diff)
+        print(f"Change diff report: {outputs['md']}")
+        print(f"Change diff JSON: {outputs['json']}")
+        print(f"PR review comment: {outputs['pr']}")
+        print(f"Change risks: {diff['summary']['risks']}")
         return 0
 
     input_dir = Path(args.input).resolve()
