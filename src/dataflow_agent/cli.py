@@ -10,6 +10,7 @@ from .defaults import default_build_output, default_check_output, default_merge_
 from .graph_builder import build_graph
 from .merge import merge_dcps
 from .normalizer import normalize_workbook
+from .analyzers import build_analysis_indexes, build_incident_context, write_incident_context_report
 from .pipeline import (
     load_state,
     run_all,
@@ -68,6 +69,12 @@ def main(argv: list[str] | None = None) -> int:
     port_parser.add_argument("--env", help="Environment name; defaults to 00_Metadata.Environment")
     port_parser.add_argument("--version", help="Package version; defaults to 00_Metadata.Version")
     port_parser.add_argument("--output", help="Output JSON file; defaults to <DCP>/dist/service_ports_<Service_ID>.json")
+
+    incident_parser = subparsers.add_parser("incident", help="Generate an incident investigation context for one service")
+    incident_parser.add_argument("--input", required=True, help="DCP directory or workbook path")
+    incident_parser.add_argument("--service-id", required=True, help="Service_ID to inspect")
+    incident_parser.add_argument("--alert", default="", help="Alert text used as operator context only")
+    incident_parser.add_argument("--output", help="Output directory; defaults to <DCP>/dist/incident_context_<Service_ID>")
 
     for command in ["validate", "normalize", "build", "risk", "render", "report", "package", "run"]:
         _add_common(subparsers.add_parser(command))
@@ -159,6 +166,23 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Outbound dependencies: {len(index['outbound_dependencies'])}")
         print(f"Firewall rules: {len(index['firewall_rules'])}")
         print(f"Monitoring rows: {len(index['monitoring'])}")
+        return 0
+
+    if args.command == "incident":
+        input_dir = Path(args.input).resolve()
+        output_root = Path(args.output).resolve() if args.output else default_build_output(input_dir) / f"incident_context_{args.service_id}"
+        schema = load_schema()
+        workbook = normalize_workbook(read_workbook(find_workbook(input_dir), schema), schema)
+        graph = build_graph(workbook)
+        indexes = build_analysis_indexes(workbook, graph)
+        try:
+            context = build_incident_context(workbook, graph, indexes, args.service_id, args.alert)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        outputs = write_incident_context_report(output_root, context)
+        print(f"Incident context: {outputs['md']}")
+        print(f"Incident context JSON: {outputs['json']}")
         return 0
 
     input_dir = Path(args.input).resolve()
