@@ -8,6 +8,7 @@
 
 ### Changed
 
+- README、操作指南、生成报告说明和 package README 改为结论优先、定位优先的操作型表达；去除白皮书式摘要/关键词包装，不改变 CLI、脚本、schema、图、校验、风险规则或机器可读输出结构。
 - 总览图和服务依赖图保留“入口上下文 + 主数据流 + 控制摘要 + edge ledger”的信息丰富大画布结构，并改为碰撞避让的 inline edge detail 卡片展示端口、协议、状态、来源记录、关系类型和源/目标对象。
 - 安全/监控图改为同一套信息丰富大画布结构：保留真实主数据流，使用节点覆盖标记、Security / Monitoring Ledger 和 Coverage Matrix 展示 Firewall、IAM、Monitoring 覆盖与风险，避免控制关系长线堆叠。
 - 总览图和服务依赖图放宽 ELK layered orthogonal layout 的节点、层级、边与节点、边与边间距，减少局部线条、标签和节点堆叠。
@@ -136,6 +137,7 @@ This file records user-visible changes to Dataflow Agent. Historical development
 
 ### Changed
 
+- README, operator guides, generated report notes, and package README now use conclusion-first and source-location-first wording; white-paper style abstracts/keywords were removed without changing CLI, scripts, schema, diagrams, validation, risk rules, or machine-readable output structure.
 - Kept the overview and service dependency diagrams on the information-rich large-canvas structure with entry context, primary dataflow, control summary, and edge ledger, and changed primary edge annotations to collision-aware inline edge detail cards that show ports, protocols, status, source records, relationship type, and source/target objects.
 - Changed the security / monitoring diagram to the same information-rich large-canvas structure: it keeps real primary dataflow on the canvas and shows Firewall, IAM, and Monitoring coverage through node overlays, the Security / Monitoring Ledger, and the Coverage Matrix instead of dense long crossing control lines.
 - Increased ELK layered orthogonal layout spacing for nodes, layers, edge-to-node distance, and edge-to-edge distance in the overview and service dependency diagrams to reduce local line, label, and node stacking.

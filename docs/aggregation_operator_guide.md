@@ -1,14 +1,10 @@
 # 中文版本
 
-# 数据汇总与出包流程工程白皮书
+# 数据汇总与出包操作说明
 
-## 摘要
+## 用途
 
-本文面向数据汇总负责人，说明如何通过脚本合并多个采集包并生成完整 Dataflow Project 数据流图交付包。该流程将去重、冲突识别、质量校验、图模型构建、分层图生成、报告生成和压缩归档交给智能体完成，使汇总负责人只需要关注冲突确认和最终验收。
-
-## 关键词
-
-数据汇总；采集包合并；冲突报告；数据流图；交付包；自动出包。
+数据汇总负责人用本说明合并多个 DCP，并生成完整 Dataflow Project 数据流图交付包。脚本负责去重、冲突识别、校验、建图、报告和压缩归档；负责人只处理冲突确认和最终验收。
 
 ## 一、适用范围
 
@@ -84,13 +80,9 @@ dist/
 
 # Data Aggregation And Package Generation Engineering White Paper
 
-## Abstract
+## Purpose
 
-This document is for the data aggregation owner and explains how to merge multiple collection packages and generate the complete Dataflow Project data-flow deliverable with scripts. The workflow delegates de-duplication, conflict detection, quality validation, graph construction, layered diagram rendering, report generation, and archive creation to the agent, so the owner can focus on conflict review and final acceptance.
-
-## Keywords
-
-Data aggregation; collection package merge; conflict report; data flow diagram; delivery package; automated package generation.
+Use this guide to merge multiple DCPs and generate the complete Dataflow Project data-flow package. Scripts handle de-duplication, conflict detection, validation, graph construction, reports, diagrams, and archives; the owner reviews conflicts and accepts the final package.
 
 ## 1. Scope
 

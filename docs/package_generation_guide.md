@@ -2,9 +2,9 @@
 
 # 交付包生成说明
 
-## 摘要
+## 用途
 
-本文给数据汇总负责人使用，说明如何从一个或多个 DCP 生成完整数据流图交付包。
+数据汇总负责人用本说明从一个或多个 DCP 生成完整数据流图交付包。
 
 ## 一、单个 DCP 出包
 
@@ -78,9 +78,9 @@ Meegle 同步、GCP 只读采集和版本 Diff 是后续阶段能力；当前默
 
 # Package Generation Guide
 
-## Abstract
+## Purpose
 
-This document is for the data aggregation owner and explains how to generate a complete data-flow delivery package from one or more DCPs.
+The data aggregation owner uses this guide to generate a complete data-flow delivery package from one or more DCPs.
 
 ## 1. Build One DCP
 

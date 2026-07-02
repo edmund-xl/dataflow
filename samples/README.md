@@ -2,9 +2,9 @@
 
 # 样例数据说明
 
-## 摘要
+## 用途
 
-`samples/` 目录只用于保存脱敏演示数据，帮助使用者验证脚本、自检、建图、报告和打包流程。这里的数据不得包含真实生产环境信息。
+`samples/` 目录只保存脱敏演示数据，用于验证脚本、自检、建图、报告和打包流程。这里不得包含真实生产环境信息。
 
 ## 使用规则
 
@@ -23,9 +23,9 @@
 
 # Sample Data Notes
 
-## Abstract
+## Purpose
 
-The `samples/` directory stores sanitized demonstration data only. It helps users validate scripts, self-checks, graph generation, reporting, and packaging. It must not contain real production information.
+The `samples/` directory stores sanitized demonstration data only. Use it to validate scripts, self-checks, graph generation, reporting, and packaging. It must not contain real production information.
 
 ## Usage Rules
 

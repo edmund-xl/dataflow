@@ -691,6 +691,46 @@ def test_repository_docs_are_chinese_first_then_english() -> None:
         assert text.index("# 中文版本") < text.index("# English Version")
 
 
+def test_reader_facing_docs_avoid_low_signal_wrappers() -> None:
+    docs = [
+        ROOT / "README.md",
+        ROOT / "SECURITY.md",
+        ROOT / "DATA_HANDLING.md",
+        ROOT / "samples" / "README.md",
+        ROOT / "docs" / "collector_quick_check_guide.md",
+        ROOT / "docs" / "aggregation_operator_guide.md",
+        ROOT / "docs" / "dataflow_agent_input_contract_v0.1.md",
+        ROOT / "docs" / "devops_dcp_collection_manual.md",
+        ROOT / "docs" / "devops_collection_filling_guide.md",
+        ROOT / "docs" / "dcp_self_check_guide.md",
+        ROOT / "docs" / "package_generation_guide.md",
+        ROOT / "templates" / "dataflow_v1.0" / "README.md",
+        ROOT / "src" / "dataflow_agent" / "packager.py",
+        ROOT / "src" / "dataflow_agent" / "report_generator.py",
+        ROOT / "src" / "dataflow_agent" / "architecture_findings.py",
+        ROOT / "src" / "dataflow_agent" / "summaries.py",
+    ]
+    low_signal_terms = [
+        "工程白皮书",
+        "## 摘要",
+        "## 关键词",
+        "## Abstract",
+        "## Keywords",
+        "This document describes",
+        "本文说明",
+        "自动化生产线",
+        "automated production line",
+        "建议关注",
+        "持续优化",
+        "全面提升",
+        "加强建设",
+    ]
+    for path in docs:
+        text = path.read_text(encoding="utf-8")
+        for term in low_signal_terms:
+            assert term not in text, f"{path.relative_to(ROOT)} contains low-signal wrapper term {term!r}"
+
+
 def test_security_docs_and_sensitive_scan_exist() -> None:
     security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
     data_handling = (ROOT / "DATA_HANDLING.md").read_text(encoding="utf-8")
@@ -739,6 +779,11 @@ def test_generated_docs_are_chinese_first_then_english(tmp_path: Path) -> None:
     assert architecture_findings.index("# 中文版本") < architecture_findings.index("# English Version")
     assert "| Edge_ID | 类型 | 来源 | 目标 | 状态 | 来源记录 | Evidence_ID |" in architecture_findings
     assert "不存在的关系不会被补画或补写" in architecture_findings
+    package_forbidden = ["## 摘要", "## 关键词", "## Abstract", "## Keywords", "工程白皮书"]
+    for term in package_forbidden:
+        assert term not in package_readme
+        assert term not in architecture_findings
+        assert term not in "\n".join(paragraphs)
 
 
 def test_architecture_findings_include_review_observations(tmp_path: Path) -> None:

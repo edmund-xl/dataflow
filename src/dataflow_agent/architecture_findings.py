@@ -147,9 +147,9 @@ def _append_chinese(
             f"- 真实数据流关系：{len(dataflow_edges)}",
             f"- 审查观察项：{len(observations)}",
             "",
-            "## 使用口径",
+            "## 判断依据",
             "",
-            "本报告直接分析 Excel/DCP 生成的 graph model、校验结果、风险结果和可审查事实，不依赖人工阅读图形。下面列出的链路只来自真实 graph edge；不存在的关系不会被补画或补写。`问题分组` 是自动化 finding，`审查观察项` 是通过但仍建议在架构、安全或监控评审中确认的事实。",
+            "本报告只使用 Excel/DCP 生成的 graph model、校验结果、风险结果和可审查事实。下面的链路只来自真实 graph edge；不存在的关系不会被补画或补写。需要修复的项看 `缺失与风险清单` 和 `修复定位清单`。",
             "",
             "## 真实数据流链路",
             "",
@@ -197,7 +197,7 @@ def _append_chinese(
             "",
             "## 处理规则",
             "",
-            "如果本报告指出问题，应修改源 Excel/DCP 后重新运行脚本。不要直接修改生成的图、报告或压缩包。",
+            "修改源 Excel/DCP 后重新运行脚本。不要直接修改生成的图、报告或压缩包。",
             "",
         ]
     )
@@ -238,7 +238,7 @@ def _append_english(
             "",
             "## Review Basis",
             "",
-            "This report analyzes the graph model, validation findings, risk findings, and reviewable facts generated from the Excel/DCP source. It does not rely on manual diagram reading. The dataflow paths below are derived only from real graph edges; nonexistent relationships are not invented. `Finding Groups` are automated findings, while `Review Observations` are passing facts that should still be confirmed during architecture, security, or monitoring review.",
+            "This report uses only the graph model, validation findings, risk findings, and reviewable facts generated from Excel/DCP. The dataflow paths below are derived only from real graph edges; nonexistent relationships are not invented. Use `Missing Information And Risk List` and `Fix Location List` for actions.",
             "",
             "## Real Dataflow Paths",
             "",
@@ -286,7 +286,7 @@ def _append_english(
             "",
             "## Handling Rule",
             "",
-            "If this report identifies a problem, correct the source Excel/DCP and rerun the script. Do not directly edit generated diagrams, reports, or archives.",
+            "Correct the source Excel/DCP and rerun the script. Do not directly edit generated diagrams, reports, or archives.",
             "",
         ]
     )

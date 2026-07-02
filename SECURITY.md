@@ -2,9 +2,9 @@
 
 # 安全说明
 
-## 摘要
+## 规则
 
-本仓库是 Dataflow Project 数据流图智能体的开源工程仓库，不是生产环境数据仓库。仓库只应保存源码、脱敏样例、通用模板和说明文档，不应提交真实生产拓扑、真实导出文件或证据文件。
+本仓库只保存源码、脱敏样例、通用模板和说明文档。不得提交真实生产拓扑、真实导出文件或证据文件。
 
 ## 一、不得提交的内容
 
@@ -33,9 +33,9 @@ scripts/scan_sensitive.sh
 
 # Security Notes
 
-## Abstract
+## Rule
 
-This repository is the open-source engineering repository for the Dataflow Project data-flow agent. It is not a production data repository. It should contain source code, sanitized samples, generic templates, and documentation only.
+This repository contains source code, sanitized samples, generic templates, and documentation only. Do not commit real production topology, raw exports, or evidence files.
 
 ## 1. Content That Must Not Be Committed
 

@@ -50,10 +50,8 @@ def _write_logic_mapping_docx(
     doc.add_heading("一、验收结论", level=2)
     doc.add_paragraph(f"结论：{conclusion}")
     doc.add_paragraph("判定口径：存在 P0 问题时为 Blocked；存在 P1 或待确认项时为 Needs Review；无阻断和待确认项时为 Pass。")
-    doc.add_heading("摘要", level=2)
-    doc.add_paragraph("本文记录本次数据采集包经过智能体处理后的逻辑映射验证结果。报告覆盖输入工作簿、图模型规模、校验结果、风险结果和再生成规则，用于评审数据流图是否具备交付条件。")
-    doc.add_heading("关键词", level=2)
-    doc.add_paragraph("逻辑映射；数据流图；图模型；校验报告；风险检查；可重复生成。")
+    doc.add_heading("报告用途", level=2)
+    doc.add_paragraph("本报告用于验收本次 DCP 的逻辑映射结果。先看验收结论和验证结果摘要；如存在问题，按校验问题表和一致性与风险问题表回到源工作簿修正。")
     doc.add_heading("二、基础信息", level=2)
     _add_metric_table(
         doc,
@@ -97,10 +95,8 @@ def _write_logic_mapping_docx(
     doc.add_heading("1. Acceptance Conclusion", level=2)
     doc.add_paragraph(f"Conclusion: {conclusion}")
     doc.add_paragraph("Decision rule: P0 findings mean Blocked; P1 or pending-confirmation findings mean Needs Review; no blocking or pending findings means Pass.")
-    doc.add_heading("Abstract", level=2)
-    doc.add_paragraph("This report records the logic-mapping validation results produced by the agent from the current Data Collection Package. It covers the input workbook, graph-model size, validation results, risk results, and regeneration rule, and is used to review whether the data-flow diagram is ready for delivery.")
-    doc.add_heading("Keywords", level=2)
-    doc.add_paragraph("Logic mapping; data flow diagram; graph model; validation report; risk check; reproducible generation.")
+    doc.add_heading("Report Use", level=2)
+    doc.add_paragraph("Use this report to accept the logic-mapping result for the current DCP. Read the acceptance conclusion and validation summary first. If findings exist, correct the source workbook using the validation and consistency/risk tables.")
     doc.add_heading("2. Basic Information", level=2)
     _add_metric_table(
         doc,

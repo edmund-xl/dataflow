@@ -2,9 +2,9 @@
 
 # 数据处理规则
 
-## 摘要
+## 规则
 
-本文说明 Dataflow Project 数据采集包、证据、导出文件和生成产物的存放、脱敏、归档和访问控制规则。原则是：真实数据不进入 public Git，生成产物可重复生成，错误必须回到源工作簿修正。
+真实数据不进入 public Git。生成产物必须可重复生成；如果图或报告有错误，必须回到源工作簿修正。
 
 ## 一、目录规则
 
@@ -35,9 +35,9 @@ python -m pytest -q
 
 # Data Handling Rules
 
-## Abstract
+## Rule
 
-This document defines how Dataflow Project collection packages, evidence, raw exports, and generated artifacts should be stored, sanitized, archived, and access-controlled. The rule is simple: real data must not enter public Git, generated artifacts must be reproducible, and source workbook errors must be corrected at the source.
+Real data must not enter public Git. Generated artifacts must be reproducible; if a diagram or report is wrong, correct the source workbook.
 
 ## 1. Directory Rules
 

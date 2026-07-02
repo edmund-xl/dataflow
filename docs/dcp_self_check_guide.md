@@ -2,9 +2,9 @@
 
 # DCP 自检说明
 
-## 摘要
+## 用途
 
-本文说明如何用一个脚本快速判断 DCP 是否可以提交。自检只读取工作簿和证据目录，不修改生产环境。
+用一个脚本判断 DCP 是否可以提交。自检只读取工作簿和证据目录，不修改生产环境。
 
 ## 一、运行命令
 
@@ -54,9 +54,9 @@ path/to/DCP_v0.1/agent_check/
 
 # DCP Self-Check Guide
 
-## Abstract
+## Purpose
 
-This document explains how to quickly determine whether a DCP is ready for submission with one script. The self-check reads only the workbook and evidence folder and does not modify production environments.
+Use one script to determine whether a DCP is ready for submission. The self-check reads only the workbook and evidence folder and does not modify production environments.
 
 ## 1. Command
 

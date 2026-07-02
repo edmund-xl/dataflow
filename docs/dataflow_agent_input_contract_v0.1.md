@@ -1,18 +1,14 @@
 # 中文版本
 
-# Dataflow Project 数据流图智能体输入输出契约工程白皮书
+# Dataflow Project 数据流图智能体输入输出契约
 
-## 摘要
+## 用途
 
-本文定义 Dataflow Project 数据流图智能体与数据采集包之间的稳定接口。该契约规定输入目录结构、工作簿表单、状态语义、主键、外键、节点生成规则、边生成规则、质量门禁和输出产物。契约的目标是保证智能体不会脱离结构化输入推断生产事实，所有图、报告和归档包都可以从同一份数据采集包重复生成。
+本契约定义 Agent 与 DCP 之间的稳定接口，包括输入目录、工作簿表单、状态语义、主键、外键、节点生成、边生成、质量门禁和输出产物。Agent 只能基于结构化输入生成图、报告和归档包。
 
 当前版本是规则驱动确定性 Agent。事实来源仅限 DCP 工作簿和证据目录；Agent 不接管生产环境、不自动采集生产事实、不自动接受安全例外。
 
-## 关键词
-
-输入契约；数据采集包；工作簿；主键；外键；图模型；质量门禁；交付包。
-
-## 一、研究背景
+## 一、事实源规则
 
 数据流图交付必须建立在可追溯的事实数据之上。为了避免人工画图导致的事实漂移，本项目将数据采集包作为唯一结构化输入，并要求智能体只基于该输入执行校验、建模、渲染、报告和打包。
 
@@ -204,19 +200,15 @@ dataflow_package_v0.1/
 
 # English Version
 
-# Dataflow Project Dataflow Agent Input And Output Contract Engineering White Paper
+# Dataflow Project Dataflow Agent Input And Output Contract
 
-## Abstract
+## Purpose
 
-This document defines the stable interface between the Dataflow Project Dataflow Agent and the Data Collection Package. The contract specifies the input directory structure, workbook sheets, record-status semantics, primary keys, foreign keys, node-generation rules, edge-generation rules, quality gates, and output artifacts. Its purpose is to ensure that the agent never infers production facts outside structured input and that every diagram, report, and archive can be regenerated from the same collection package.
+This contract defines the stable interface between the agent and the DCP: input directories, workbook sheets, record-status semantics, primary keys, foreign keys, node generation, edge generation, quality gates, and output artifacts. The agent may generate diagrams, reports, and archives only from structured input.
 
 The current version is a rule-driven deterministic agent. Its factual inputs are limited to the DCP workbook and evidence folder; it does not take over production environments, automatically collect production facts, or automatically accept security exceptions.
 
-## Keywords
-
-Input contract; Data Collection Package; workbook; primary key; foreign key; graph model; quality gate; delivery package.
-
-## 1. Background
+## 1. Source-Of-Truth Rule
 
 Data-flow delivery must be based on traceable factual data. To avoid fact drift caused by manual diagramming, this project treats the Data Collection Package as the only structured input and requires the agent to perform validation, modeling, rendering, reporting, and packaging only from that input.
 

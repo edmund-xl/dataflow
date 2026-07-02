@@ -1,34 +1,29 @@
 # 中文版本
 
-# Dataflow Project 数据流图智能体工程白皮书
+# Dataflow Project 数据流图智能体
 
-## 摘要
+## 快速入口
 
-本文说明 Dataflow Project 数据流图智能体的建设目标、输入数据模型、自动化处理方法、脚本化使用流程和验证方式。该智能体面向生产环境数据流图交付场景，将信息采集、质量校验、关系建模、风险检查、图表生成、报告生成和交付包归档统一为一条可重复执行的工程流水线。日常使用以脚本为入口，信息采集人员填写工作簿并运行自检脚本，数据汇总负责人收集多份 DCP 并运行构建或合并脚本。
+日常只需要执行脚本。信息采集人员填写 DCP 工作簿后运行自检；数据汇总负责人收集多份 DCP 后运行合并或出包脚本。所有图、报告和压缩包都从同一份 Excel/DCP 生成。
 
-## 关键词
+```bash
+scripts/setup_env.sh
+export DATAFLOW_PYTHON="$(pwd)/.venv/bin/python"
+scripts/check_dcp.sh samples/DCP_clean_v0.1
+scripts/build_dataflow_package.sh samples/DCP_clean_v0.1
+```
 
-数据流图；结构化采集；自动校验；图模型；交付包；脚本化流程；可重复生成。
+先看 `check_summary.md`。如果状态是 `NEEDS_FIX`，按 `fix_list.md` 回到源工作簿修正；如果需要判断服务、依赖、数据资产、外部系统、网络、安全、监控、IAM、CI/CD 和证据是否完整，读 `architecture_findings.md`。
 
-## 一、研究背景
+## 核心原则
 
-Dataflow Project 生产环境涉及云项目、网络、服务器、服务、服务依赖、数据资产、防火墙、身份权限、监控和交付链路等多类对象。传统手工画图方式容易出现信息不完整、关系不可追溯、图表与事实源分离、报告修订不可重复等问题。为降低这些风险，本项目采用“采集表作为唯一结构化事实源，智能体自动生成产物”的方法。
-
-## 二、系统目标
-
-本系统的目标是把数据流图交付从人工整理转为自动化生产线。系统应当满足以下要求：信息采集人员能够快速自检工作簿质量；数据汇总负责人能够合并多份采集包；所有图、报告和归档包均由同一份结构化数据生成；任何产物错误都回到采集表修正，而不是手工修改生成文件。
-
-## 三、方法设计
-
-系统以数据采集包作为输入。采集包中的工作簿是唯一结构化输入，证据目录用于追溯和人工复核。智能体读取工作簿后执行模式校验、主键校验、外键校验、证据引用校验、核心链路检查、安全与监控检查，然后生成节点、边、图模型、分层图、验证报告、问题台账、验收清单和最终压缩包。
-
-当前版本是规则驱动确定性 Agent。事实来源仅限 DevOps 或信息采集人员提交的 DCP 工作簿和证据目录；Agent 自动完成校验、归一化、建图、风险检查、出图、报告和打包。Agent 不凭空补依赖，不自动接受安全例外，不修改生产环境。后续外部系统同步、只读采集和版本 Diff 只作为路线图能力，不属于当前默认流程。
+当前版本是规则驱动确定性 Agent。事实来源只包括 DCP 工作簿和证据目录；Agent 负责校验、归一化、建图、风险检查、出图、报告和打包。Agent 不凭空补依赖，不自动接受安全例外，不修改生产环境。后续外部系统同步、只读采集和版本 Diff 只作为路线图能力，不属于当前默认流程。
 
 分层图采用专业渲染器生成：总览图、服务依赖图和安全/监控图使用“入口上下文 + 主数据流 + 控制摘要 / 覆盖矩阵 + edge ledger”的信息丰富视图，并优先通过 ELK layered orthogonal layout 进行主数据流排版；其他分层图使用统一的浅色 C4 架构配色。安全/监控图不把 Firewall、IAM、Monitoring 画成长穿越线，而是用节点覆盖标记、Security / Monitoring Ledger 和 Coverage Matrix 展示覆盖与风险。若 Node.js / elkjs 不可用，重点图层会回退到内置确定性布局。系统能够稳定生成 SVG、PNG、PDF、Mermaid 调试文件、draw.io 可编辑源图和 GraphML 工具交换文件。draw.io / GraphML 只用于展示和二次编辑，架构事实仍以源工作簿为准；如果关系需要变更，应修改 Excel/DCP 后重新生成。
 
 总览图和服务依赖图只展示真实数据流主线，runtime、Firewall、IAM、Monitoring 作为上下文摘要展示，不伪装成主数据流。图上线条使用 ELK 正交路由和浅色 halo；端口、协议、状态、来源工作簿记录、关系类型和源/目标对象以碰撞避让的 inline edge detail 卡片展示，并同步保留在右侧 `Edge ledger` 中回溯，避免局部标签和线条堆叠。
 
-## 四、脚本化使用流程
+## 脚本化使用流程
 
 ### 环境自检
 
@@ -130,7 +125,7 @@ scripts/query_service_ports.sh samples/DCP_clean_v0.1 svc-rpc-api
 scripts/query_service_ports.sh samples/DCP_clean_v0.1 svc-rpc-api --output /tmp/service_ports.json
 ```
 
-## 五、工程接口
+## 工程接口
 
 脚本是日常使用入口。底层命令仍保留给开发和排错使用，包括 `check`、`quick-build`、`merge`、`drilldown`、`query-port`、`validate`、`normalize`、`build`、`risk`、`render`、`report`、`package` 和 `run`。
 
@@ -142,7 +137,7 @@ DATAFLOW_PYTHON=/path/to/python scripts/check_dcp.sh samples/DCP_clean_v0.1
 
 日常脚本会把已支持的 CLI 参数继续传给底层命令，例如 `--output`、`--env`、`--version`、`--allow-conflicts`、`--depth`、`--direction`、`--theme` 和 `--risk-focus`。
 
-## 六、通用模板资料包
+## 通用模板资料包
 
 仓库提供通用数据流图模板资料包，位置为 `templates/dataflow_v1.0/`。该目录保存 v1.0 方案总文档、主数据采集模板、任务采集映射表、数据字典、样例输入、填写说明、智能体输入输出契约、演示图和嵌套模板包。
 
@@ -185,7 +180,7 @@ Schema 与模板兼容关系：
 
 最终交付包的 `metadata.json` 会写入 `version`、`schema_version` 和 `template_version`，用于追踪代码、工作簿结构和模板资料的对应关系。
 
-## 七、验证方法
+## 验证方法
 
 项目通过自动化测试验证读取、校验、建图、渲染、报告、打包、自检脚本、构建脚本和合并脚本。验证命令如下：
 
@@ -193,15 +188,11 @@ Schema 与模板兼容关系：
 python -m pytest -q
 ```
 
-## 八、开源授权
+## 开源授权
 
 本项目采用 MIT License 开源授权。版权归属 edmund-xl；使用者可以在遵守许可证条款的前提下复制、使用、修改、合并、发布、分发、再授权和销售本软件副本。完整授权文本见仓库根目录 `LICENSE` 文件。
 
-## 九、结论
-
-该智能体将 Dataflow Project 数据流图交付过程收敛为脚本化、结构化、可重复的工程流程。工作簿填写完成后能够即时反馈数据质量，汇总阶段能够自动合并与产出交付包，从而减少手工整理和手工画图带来的偏差。
-
-## 十、不可变规则
+## 不可变规则
 
 工作簿是唯一结构化事实源。如果图或报告存在错误，必须修改工作簿并重新运行脚本，不允许手工修改生成产物。
 
@@ -209,35 +200,30 @@ python -m pytest -q
 
 # English Version
 
-# Dataflow Project Dataflow Agent Engineering White Paper
+# Dataflow Project Dataflow Agent
 
-## Abstract
+## Quick Start
 
-This document describes the purpose, input model, automated processing method, script-first workflow, and validation approach of the Dataflow Project Dataflow Agent. The agent supports production data-flow deliverables by turning data collection, quality validation, relationship modeling, risk checks, diagram rendering, report generation, and package archiving into a repeatable engineering pipeline. Daily operation starts from scripts: information collection personnel fill in the workbook and run one self-check script, while the data aggregation owner collects multiple DCPs and runs one build or merge script.
+Daily use starts with scripts. Information collection personnel fill in the DCP workbook and run the self-check. The data aggregation owner collects multiple DCPs and runs build or merge scripts. Every diagram, report, and archive is generated from the same Excel/DCP source.
 
-## Keywords
+```bash
+scripts/setup_env.sh
+export DATAFLOW_PYTHON="$(pwd)/.venv/bin/python"
+scripts/check_dcp.sh samples/DCP_clean_v0.1
+scripts/build_dataflow_package.sh samples/DCP_clean_v0.1
+```
 
-Data flow diagram; structured collection; automated validation; graph model; delivery package; script-first workflow; reproducible generation.
+Read `check_summary.md` first. If the status is `NEEDS_FIX`, correct the source workbook using `fix_list.md`. To review service, dependency, data asset, external system, network, security, monitoring, IAM, CI/CD, and evidence completeness, read `architecture_findings.md`.
 
-## 1. Background
+## Core Rules
 
-The Dataflow Project production environment contains cloud projects, networks, servers, services, dependencies, data assets, firewall rules, identity permissions, monitoring controls, and delivery paths. Manual diagramming is prone to missing data, untraceable relationships, separation between diagrams and source facts, and non-reproducible report revisions. This project therefore uses the workbook as the single structured source of truth and lets the agent generate all artifacts automatically.
-
-## 2. Objectives
-
-The objective is to turn data-flow delivery from manual assembly into an automated production line. Information collection personnel should be able to validate workbook quality quickly. The data aggregation owner should be able to merge multiple collection packages. Every diagram, report, and archive should be generated from the same structured data. Any artifact error must be corrected in the workbook and regenerated, not manually edited in the output.
-
-## 3. Method
-
-The system consumes a Data Collection Package. The workbook is the only structured input, while evidence folders are used for traceability and manual review. After reading the workbook, the agent performs schema validation, primary-key checks, foreign-key checks, evidence-reference checks, core-link checks, security and monitoring checks, and then generates nodes, edges, graph models, layered diagrams, validation reports, issue registers, acceptance checklists, and the final archive.
-
-The current version is a rule-driven deterministic agent. Its factual inputs are limited to DCP workbooks and evidence folders submitted by DevOps or information collection personnel; it automates validation, normalization, graph construction, risk checks, diagrams, reports, and packaging. The agent does not invent missing dependencies, does not automatically accept security exceptions, and does not modify production environments. External-system synchronization, read-only collection, and version diff are roadmap capabilities, not part of the default workflow.
+The current version is a rule-driven deterministic agent. Its factual inputs are limited to DCP workbooks and evidence folders. The agent validates, normalizes, builds graphs, checks risks, renders diagrams, writes reports, and packages outputs. It does not invent missing dependencies, does not automatically accept security exceptions, and does not modify production environments. External-system synchronization, read-only collection, and version diff remain roadmap capabilities.
 
 Layered diagrams are generated by the professional renderer: the overview, service dependency, and security / monitoring diagrams use the information-rich "entry context + primary dataflow + control summary or coverage matrix + edge ledger" view and prefer ELK layered orthogonal layout for primary dataflow routing, while the other layered diagrams use the same light C4 architecture palette. The security / monitoring diagram does not draw Firewall, IAM, or Monitoring as long crossing dataflow lines; it shows them through node overlays, the Security / Monitoring Ledger, and the Coverage Matrix. If Node.js / elkjs is unavailable, the key diagrams fall back to the built-in deterministic layout. The system consistently produces SVG, PNG, PDF, Mermaid debug files, draw.io editable source files, and GraphML exchange files. draw.io and GraphML outputs are for presentation editing and tool import; the source workbook remains the factual source of truth. If a relationship changes, update the Excel/DCP and regenerate the package.
 
 The overview and service dependency layers render only real primary dataflow lines. Runtime, Firewall, IAM, and Monitoring relationships stay as context summaries rather than primary dataflow. Lines use ELK orthogonal routing and a light halo; ports, protocols, status, source workbook rows, relationship types, source objects, and target objects are shown in collision-aware inline edge detail cards and also traced in the right-side `Edge ledger` to avoid local label and line stacking.
 
-## 4. Script-First Workflow
+## Script-First Workflow
 
 ### Environment Doctor
 
@@ -339,7 +325,7 @@ To specify the output file:
 scripts/query_service_ports.sh samples/DCP_clean_v0.1 svc-rpc-api --output /tmp/service_ports.json
 ```
 
-## 5. Engineering Interface
+## Engineering Interface
 
 Scripts are the daily operation interface. Lower-level commands remain available for development and troubleshooting, including `check`, `quick-build`, `merge`, `drilldown`, `query-port`, `validate`, `normalize`, `build`, `risk`, `render`, `report`, `package`, and `run`.
 
@@ -351,7 +337,7 @@ DATAFLOW_PYTHON=/path/to/python scripts/check_dcp.sh samples/DCP_clean_v0.1
 
 Daily scripts forward supported CLI arguments to the lower-level commands, including `--output`, `--env`, `--version`, `--allow-conflicts`, `--depth`, `--direction`, `--theme`, and `--risk-focus`.
 
-## 6. Generic Template Package
+## Generic Template Package
 
 The repository includes a generic data-flow template package at `templates/dataflow_v1.0/`. The directory contains the v1.0 final plan document, main collection template, task collection mapping, data dictionary, sample input, filling guide, agent input/output contract, demo diagrams, and nested template bundle.
 
@@ -394,7 +380,7 @@ Schema and template compatibility:
 
 The final package `metadata.json` records `version`, `schema_version`, and `template_version` so code, workbook structure, and template materials remain traceable.
 
-## 7. Validation Method
+## Validation Method
 
 Automated tests validate reading, validation, graph construction, rendering, reporting, packaging, self-check scripts, build scripts, and merge scripts. The validation command is:
 
@@ -402,14 +388,10 @@ Automated tests validate reading, validation, graph construction, rendering, rep
 python -m pytest -q
 ```
 
-## 8. Open-Source License
+## Open-Source License
 
 This project is released under the MIT License. Copyright remains with edmund-xl, and users may copy, use, modify, merge, publish, distribute, sublicense, and sell copies of the software subject to the license terms. The full license text is available in the repository root `LICENSE` file.
 
-## 9. Conclusion
-
-The agent turns Dataflow Project data-flow delivery into a scripted, structured, and reproducible engineering workflow. The collection stage receives immediate quality feedback, and the aggregation stage automatically merges data and produces the final delivery package, reducing errors caused by manual assembly and manual diagramming.
-
-## 10. Invariant Rule
+## Invariant Rule
 
 The workbook is the only structured source of truth. If a diagram or report is wrong, correct the workbook and rerun the script. Do not manually edit generated artifacts.

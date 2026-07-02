@@ -1,14 +1,10 @@
 # 中文版本
 
-# 信息采集自检流程工程白皮书
+# 信息采集自检操作说明
 
-## 摘要
+## 用途
 
-本文面向 DevOps 和信息采集人员，说明如何使用一个脚本完成采集包质量自检。自检流程的目标是让使用者在提交前发现缺失字段、引用错误、证据缺失、待确认关系和关键链路风险，从而减少汇总阶段的返工。
-
-## 关键词
-
-信息采集；数据采集包；自检；修复清单；质量门禁。
+DevOps 和信息采集人员用本说明在提交前自检 DCP。脚本会列出缺失字段、引用错误、证据缺失、待确认关系和关键链路风险；修复动作回到源工作簿完成。
 
 ## 一、适用范围
 
@@ -81,15 +77,11 @@ reports/logic_mapping_validation_report.docx
 
 # English Version
 
-# Information Collection Self-Check Workflow Engineering White Paper
+# Information Collection Self-Check Guide
 
-## Abstract
+## Purpose
 
-This document is for DevOps and information collection personnel and explains how to validate a collection package with one script. The goal is to help users identify missing fields, broken references, missing evidence, pending relationships, and key-path risks before submission, thereby reducing rework during aggregation.
-
-## Keywords
-
-Data collection; Data Collection Package; self-check; fix list; quality gate.
+DevOps and information collection personnel use this guide to check a DCP before submission. The script reports missing fields, broken references, missing evidence, pending relationships, and key-path risks; fixes must be made in the source workbook.
 
 ## 1. Scope
 
