@@ -16,7 +16,7 @@ class AnalysisIndexes:
     dependencies: dict[str, Row] = field(default_factory=dict)
     data_assets: dict[str, Row] = field(default_factory=dict)
     external_services: dict[str, Row] = field(default_factory=dict)
-    monitoring_by_object: dict[str, list[Row]] = field(default_factory=dict)
+    monitoring_by_object: dict[tuple[str, str], list[Row]] = field(default_factory=dict)
     dependencies_by_source: dict[str, list[Row]] = field(default_factory=dict)
     dependencies_by_target: dict[str, list[Row]] = field(default_factory=dict)
     data_assets_by_service: dict[str, list[Row]] = field(default_factory=dict)
@@ -78,8 +78,9 @@ def _index_external_services(workbook: WorkbookData, indexes: AnalysisIndexes) -
 
 def _index_security_and_operations(workbook: WorkbookData, indexes: AnalysisIndexes) -> None:
     for row in active_rows(workbook, "10_Monitoring"):
+        object_type = row.get("Object_Type", "")
         for object_id in split_multi(row.get("Object_ID", "")):
-            _append(indexes.monitoring_by_object, object_id, row)
+            _append(indexes.monitoring_by_object, (object_type, object_id), row)
     for row in active_rows(workbook, "09_IAM_SA"):
         for service_id in split_multi(row.get("Used_By_Service_ID", "")):
             _append(indexes.iam_by_service, service_id, row)

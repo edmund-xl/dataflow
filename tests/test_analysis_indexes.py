@@ -63,6 +63,7 @@ def test_indexes_monitoring_iam_cicd_and_firewalls() -> None:
                 {
                     "Record_ID": "rec-mon-1",
                     "Monitoring_ID": "mon-1",
+                    "Object_Type": "service",
                     "Object_ID": "svc-api",
                     "Confirmation_Status": "Confirmed",
                 }
@@ -89,7 +90,7 @@ def test_indexes_monitoring_iam_cicd_and_firewalls() -> None:
 
     indexes = build_analysis_indexes(workbook, _graph([]))
 
-    assert indexes.monitoring_by_object["svc-api"][0]["Monitoring_ID"] == "mon-1"
+    assert indexes.monitoring_by_object[("service", "svc-api")][0]["Monitoring_ID"] == "mon-1"
     assert indexes.iam_by_service["svc-api"][0]["IAM_Binding_ID"] == "iam-1"
     assert indexes.iam_by_service["svc-worker"][0]["IAM_Binding_ID"] == "iam-1"
     assert indexes.cicd_by_target_service["svc-api"][0]["CICD_ID"] == "pipe-1"
