@@ -10,7 +10,7 @@ from .defaults import default_build_output, default_check_output, default_merge_
 from .graph_builder import build_graph
 from .merge import merge_dcps
 from .normalizer import normalize_workbook
-from .analyzers import build_analysis_indexes, build_incident_context, write_incident_context_report
+from .analyzers import build_analysis_indexes, build_change_diff, build_incident_context, write_change_diff_report, write_incident_context_report
 from .pipeline import (
     load_state,
     run_all,
@@ -75,6 +75,11 @@ def main(argv: list[str] | None = None) -> int:
     incident_parser.add_argument("--service-id", required=True, help="Service_ID to inspect")
     incident_parser.add_argument("--alert", default="", help="Alert text used as operator context only")
     incident_parser.add_argument("--output", help="Output directory; defaults to <DCP>/dist/incident_context_<Service_ID>")
+
+    diff_parser = subparsers.add_parser("diff", help="Compare two DCP or graph JSON sources for rollout risk")
+    diff_parser.add_argument("--base", required=True, help="Base DCP directory, workbook path, or dataflow_graph.json")
+    diff_parser.add_argument("--new", required=True, help="New DCP directory, workbook path, or dataflow_graph.json")
+    diff_parser.add_argument("--output", required=True, help="Output directory")
 
     for command in ["validate", "normalize", "build", "risk", "render", "report", "package", "run"]:
         _add_common(subparsers.add_parser(command))
@@ -183,6 +188,15 @@ def main(argv: list[str] | None = None) -> int:
         outputs = write_incident_context_report(output_root, context)
         print(f"Incident context: {outputs['md']}")
         print(f"Incident context JSON: {outputs['json']}")
+        return 0
+
+    if args.command == "diff":
+        diff = build_change_diff(Path(args.base), Path(args.new))
+        outputs = write_change_diff_report(Path(args.output).resolve(), diff)
+        print(f"Change diff report: {outputs['md']}")
+        print(f"Change diff JSON: {outputs['json']}")
+        print(f"PR review comment: {outputs['pr']}")
+        print(f"Change risks: {diff['summary']['risks']}")
         return 0
 
     input_dir = Path(args.input).resolve()

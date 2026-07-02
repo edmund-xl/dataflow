@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .change_diff import build_change_diff, load_change_source, write_change_diff_report
 from .critical_path import CriticalServiceImpact, analyze_critical_paths, write_critical_path_report
 from .data_quality import analyze_data_quality, write_data_quality_report
 from .indexes import AnalysisIndexes, build_analysis_indexes
@@ -33,13 +34,16 @@ __all__ = [
     "analyze_data_quality",
     "analyze_monitoring_gaps",
     "analyze_security_risks",
+    "build_change_diff",
     "build_analysis_indexes",
     "build_incident_context",
+    "load_change_source",
     "monitoring_requirements_rows",
     "permission_blast_radius",
     "security_control_gap_rows",
     "sensitive_data_flow_rows",
     "suggested_alerts_rows",
+    "write_change_diff_report",
     "write_critical_path_report",
     "write_data_quality_report",
     "write_incident_context_report",
