@@ -300,7 +300,7 @@ def _sensitive_data_access_findings(workbook: WorkbookData, indexes: AnalysisInd
 def _high_privilege_iam_findings(workbook: WorkbookData) -> list[_FindingDraft]:
     findings: list[_FindingDraft] = []
     for row in active_rows(workbook, "09_IAM_SA"):
-        if row.get("Is_High_Privilege", "").strip().lower() != "yes" or row.get("Justification", "").strip():
+        if not _is_high_privilege_iam(row) or row.get("Justification", "").strip():
             continue
         iam_id = row.get("IAM_Binding_ID", "")
         findings.append(
@@ -546,7 +546,7 @@ def _is_high_privilege_iam(row: Row) -> bool:
         return True
     role = row.get("Role", "")
     role_lower = role.lower()
-    return role_lower in {"owner", "editor"} or role_lower.endswith("/owner") or "admin" in role_lower or "*" in role
+    return role_lower in {"owner", "editor"} or role_lower.endswith(("/owner", "/editor")) or "admin" in role_lower or "*" in role
 
 
 def _p0_p1_cicd_targets(row: Row, indexes: AnalysisIndexes) -> list[str]:

@@ -164,6 +164,19 @@ def _fixture() -> tuple[WorkbookData, GraphModel]:
                     "Evidence_ID": "ev-iam-shared",
                     "Confirmation_Status": "Confirmed",
                 },
+                {
+                    "Record_ID": "rec-iam-editor",
+                    "IAM_Binding_ID": "iam-editor",
+                    "Service_Account_ID": "sa-editor",
+                    "Service_Account_Email": "sa-editor@example.test",
+                    "Used_By_Service_ID": "svc-worker",
+                    "Role": "roles/editor",
+                    "Scope": "project",
+                    "Justification": "",
+                    "Is_High_Privilege": "No",
+                    "Evidence_ID": "ev-iam-editor",
+                    "Confirmation_Status": "Confirmed",
+                },
             ],
             "10_Monitoring": [
                 {
@@ -274,7 +287,7 @@ def test_security_analyzer_covers_all_security_rules() -> None:
 
     findings = analyze_security_risks(workbook, graph, indexes)
 
-    assert [finding.finding_id for finding in findings] == [f"SEC-{idx:04d}" for idx in range(1, 10)]
+    assert [finding.finding_id for finding in findings] == [f"SEC-{idx:04d}" for idx in range(1, 11)]
     categories = {finding.category for finding in findings}
     assert categories == {
         "CI/CD approval",
@@ -291,6 +304,7 @@ def test_security_analyzer_covers_all_security_rules() -> None:
     assert any(finding.severity == "P1" and finding.object_id == "data-secrets:svc-admin" for finding in findings)
     assert any(finding.severity == "P2" and finding.object_id == "data-secrets:svc-unmonitored" for finding in findings)
     assert any(finding.object_id == "iam-admin" and finding.field == "Justification" for finding in findings)
+    assert any(finding.object_id == "iam-editor" and finding.field == "Justification" for finding in findings)
     assert any(finding.object_id == "sa-shared" and finding.severity == "P2" for finding in findings)
     assert any(finding.object_id == "pipe-entry" and finding.severity == "P1" for finding in findings)
     assert any(finding.object_id == "pipe-bad" and "Target_Service_ID/Target_Instance_ID" in finding.field for finding in findings)
@@ -311,7 +325,7 @@ def test_security_helper_outputs_are_grouped_and_deterministic() -> None:
     findings = analyze_security_risks(workbook, graph, indexes)
 
     gap_rows = security_control_gap_rows(findings)
-    assert [row["finding_id"] for row in gap_rows] == [f"SEC-{idx:04d}" for idx in range(1, 10)]
+    assert [row["finding_id"] for row in gap_rows] == [f"SEC-{idx:04d}" for idx in range(1, 11)]
     assert gap_rows[0]["category"] == "CI/CD completeness"
 
     radius = permission_blast_radius(workbook, graph, indexes)
@@ -347,7 +361,7 @@ def test_security_report_writers_create_expected_files(tmp_path: Path) -> None:
     assert (tmp_path / "security_risk_report.json").exists()
     assert (tmp_path / "security_risk_report.csv").exists()
     payload = json.loads(report_paths["json"].read_text(encoding="utf-8"))
-    assert payload["summary"]["total_findings"] == 9
+    assert payload["summary"]["total_findings"] == 10
     assert "SEC-0001" in gap_path.read_text(encoding="utf-8")
     radius = json.loads(radius_path.read_text(encoding="utf-8"))
     assert radius["svc-app"]["external_calls"][0]["external_id"] == "ext-payments"
